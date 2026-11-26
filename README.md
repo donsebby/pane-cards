@@ -43,7 +43,7 @@ rows:
 | `header_action` | `all_off` – turns off every light and switch of the card |
 | `columns` | `1` (list) to `4` |
 | `look` | `glass` or `solid`; without it the theme decides |
-| `frame` | `false` – no panel of its own (inside a pop-up) |
+| `frame` | default: own panel, none inside a pop-up; `true` always, `false` never |
 | `glow` | `false` – calmer, no glow on active tiles |
 | `stat_size` | `large` – bigger numbers |
 
@@ -73,6 +73,9 @@ installed).
 | `pane-warm`, `pane-heat`, `pane-accent`, `pane-ok`, `pane-alert` | the five state colours |
 
 ## Changelog
+
+### 0.1.1
+- No panel of its own inside a pop-up (`frame` now defaults to automatic).
 
 ### 0.1.0
 - First version: shared core (look from the theme, header, templates, actions,

@@ -1,5 +1,5 @@
-// Pane Cards 0.1.0 - https://github.com/donsebby/pane-cards (MIT)
-const CARD_VERSION = '0.1.0';
+// Pane Cards 0.1.1 - https://github.com/donsebby/pane-cards (MIT)
+const CARD_VERSION = '0.1.1';
 
 // src/core/style.js
 var INK = "var(--primary-text-color, #fff)";
@@ -209,6 +209,21 @@ var PaneCard = class _PaneCard extends HTMLElement {
     window.addEventListener("lg-theme-changed", this._onThemeChanged);
     window.addEventListener("pane-theme-changed", this._onThemeChanged);
     this._recheckThemeLook();
+    const inPopup = _PaneCard.insidePopup(this);
+    if (inPopup !== this._inPopup) {
+      this._inPopup = inPopup;
+      if (this.cardEl) this._applyCardClasses();
+    }
+  }
+  static insidePopup(el) {
+    let n = el.parentNode || el.host;
+    for (let i = 0; n && i < 60; i += 1) {
+      const cl = n.classList;
+      if (cl && (cl.contains("bubble-pop-up") || cl.contains("bubble-pop-up-container"))) return true;
+      if (n.localName === "ha-more-info-dialog" || n.localName === "ha-dialog") return true;
+      n = n.parentNode || n.host;
+    }
+    return false;
   }
   disconnectedCallback() {
     window.removeEventListener("lg-theme-changed", this._onThemeChanged);
@@ -269,7 +284,7 @@ var PaneCard = class _PaneCard extends HTMLElement {
   _applyCardClasses() {
     const c = this._config;
     this.cardEl.classList.toggle("solid", this.isSolid());
-    this.cardEl.classList.toggle("frameless", c.frame === false);
+    this.cardEl.classList.toggle("frameless", c.frame === false || c.frame == null && !!this._inPopup);
     this.cardEl.classList.toggle("calm", !this.glowOn());
   }
   // ---- look ----------------------------------------------------------
@@ -1290,7 +1305,7 @@ var PaneTileCardEditor = class extends PaneEditor {
       header_action: "Knopf rechts",
       columns: "Spalten",
       look: "Look",
-      frame: "Eigener Rahmen",
+      frame: "Rahmen",
       glow: "Leuchten",
       stat_size: "Zahlen",
       entity: "Entit\xE4t",
@@ -1322,7 +1337,7 @@ var PaneTileCardEditor = class extends PaneEditor {
       ...c,
       columns: String(c.columns ?? (c.layout === "grid" ? 2 : 1)),
       look: c.look || "theme",
-      frame: c.frame !== false,
+      frame: c.frame === void 0 ? "auto" : c.frame ? "on" : "off",
       glow: c.glow !== false,
       icon_color: c.icon_color || "auto",
       header_action: c.header_action || "none",
@@ -1375,7 +1390,7 @@ var PaneTileCardEditor = class extends PaneEditor {
             { name: "look", selector: select([{ value: "theme", label: "Vom Theme" }, { value: "glass", label: "Glass" }, { value: "solid", label: "Solid" }]) }
           ] },
           { type: "grid", name: "", schema: [
-            { name: "frame", selector: { boolean: {} } },
+            { name: "frame", selector: select([{ value: "auto", label: "Automatisch (kein Rahmen im Pop-up)" }, { value: "on", label: "Immer" }, { value: "off", label: "Nie" }]) },
             { name: "glow", selector: { boolean: {} } }
           ] },
           { name: "stat_size", selector: select([{ value: "normal", label: "Normal" }, { value: "large", label: "Gro\xDF" }]) }
@@ -1424,7 +1439,9 @@ var PaneTileCardEditor = class extends PaneEditor {
     next.columns = Number(v.columns ?? next.columns) || 1;
     if (next.columns === 1) delete next.columns;
     if (next.look === "theme") delete next.look;
-    if (next.frame === true) delete next.frame;
+    if (next.frame === "auto") delete next.frame;
+    else if (next.frame === "on") next.frame = true;
+    else if (next.frame === "off") next.frame = false;
     if (next.glow === true) delete next.glow;
     if (next.icon_color === "auto") delete next.icon_color;
     if (next.header_action === "none") delete next.header_action;

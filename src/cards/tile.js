@@ -611,7 +611,7 @@ export class PaneTileCardEditor extends PaneEditor {
   labels() {
     return {
       title: 'Titel', icon: 'Icon', subtitle: 'Untertitel', icon_color: 'Icon-Farbe', header_action: 'Knopf rechts',
-      columns: 'Spalten', look: 'Look', frame: 'Eigener Rahmen', glow: 'Leuchten', stat_size: 'Zahlen',
+      columns: 'Spalten', look: 'Look', frame: 'Rahmen', glow: 'Leuchten', stat_size: 'Zahlen',
       entity: 'Entität', type: 'Art', name: 'Name', color: 'Farbe', min: 'Minimum', max: 'Maximum',
       hide_track: 'Leiste ausblenden', power_entity: 'Leistung aus Entität', state_text: 'Statuszeile',
       progress: 'Füllstand (Vorlage)', value: 'Wert (Vorlage)', tap_action: 'Antippen', hold_action: 'Lang drücken',
@@ -633,7 +633,7 @@ export class PaneTileCardEditor extends PaneEditor {
       ...c,
       columns: String(c.columns ?? (c.layout === 'grid' ? 2 : 1)),
       look: c.look || 'theme',
-      frame: c.frame !== false,
+      frame: c.frame === undefined ? 'auto' : c.frame ? 'on' : 'off',
       glow: c.glow !== false,
       icon_color: c.icon_color || 'auto',
       header_action: c.header_action || 'none',
@@ -686,7 +686,7 @@ export class PaneTileCardEditor extends PaneEditor {
             { name: 'look', selector: select([{ value: 'theme', label: 'Vom Theme' }, { value: 'glass', label: 'Glass' }, { value: 'solid', label: 'Solid' }]) },
           ] },
           { type: 'grid', name: '', schema: [
-            { name: 'frame', selector: { boolean: {} } },
+            { name: 'frame', selector: select([{ value: 'auto', label: 'Automatisch (kein Rahmen im Pop-up)' }, { value: 'on', label: 'Immer' }, { value: 'off', label: 'Nie' }]) },
             { name: 'glow', selector: { boolean: {} } },
           ] },
           { name: 'stat_size', selector: select([{ value: 'normal', label: 'Normal' }, { value: 'large', label: 'Groß' }]) },
@@ -734,7 +734,9 @@ export class PaneTileCardEditor extends PaneEditor {
     next.columns = Number(v.columns ?? next.columns) || 1;
     if (next.columns === 1) delete next.columns;
     if (next.look === 'theme') delete next.look;
-    if (next.frame === true) delete next.frame;
+    if (next.frame === 'auto') delete next.frame;
+    else if (next.frame === 'on') next.frame = true;
+    else if (next.frame === 'off') next.frame = false;
     if (next.glow === true) delete next.glow;
     if (next.icon_color === 'auto') delete next.icon_color;
     if (next.header_action === 'none') delete next.header_action;

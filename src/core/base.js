@@ -43,6 +43,24 @@ export class PaneCard extends HTMLElement {
     window.addEventListener('lg-theme-changed', this._onThemeChanged);
     window.addEventListener('pane-theme-changed', this._onThemeChanged);
     this._recheckThemeLook();
+    // frame: auto (default) - inside a pop-up the card drops its own panel,
+    // the pop-up already is one (a panel in a panel reads as a box in a box).
+    const inPopup = PaneCard.insidePopup(this);
+    if (inPopup !== this._inPopup) {
+      this._inPopup = inPopup;
+      if (this.cardEl) this._applyCardClasses();
+    }
+  }
+
+  static insidePopup(el) {
+    let n = el.parentNode || el.host;
+    for (let i = 0; n && i < 60; i += 1) {
+      const cl = n.classList;
+      if (cl && (cl.contains('bubble-pop-up') || cl.contains('bubble-pop-up-container'))) return true;
+      if (n.localName === 'ha-more-info-dialog' || n.localName === 'ha-dialog') return true;
+      n = n.parentNode || n.host;
+    }
+    return false;
   }
 
   disconnectedCallback() {
@@ -107,7 +125,7 @@ export class PaneCard extends HTMLElement {
   _applyCardClasses() {
     const c = this._config;
     this.cardEl.classList.toggle('solid', this.isSolid());
-    this.cardEl.classList.toggle('frameless', c.frame === false);
+    this.cardEl.classList.toggle('frameless', c.frame === false || (c.frame == null && !!this._inPopup));
     this.cardEl.classList.toggle('calm', !this.glowOn());
   }
 
