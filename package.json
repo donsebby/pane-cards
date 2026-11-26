@@ -1,0 +1,10 @@
+{
+  "name": "pane-cards",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pane Cards for Home Assistant",
+  "scripts": { "build": "node build.mjs" },
+  "devDependencies": { "esbuild": "^0.28.2" },
+  "license": "MIT"
+}

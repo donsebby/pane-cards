@@ -1,0 +1,24 @@
+name: Build
+
+# dist/ and lab/ are committed (HACS serves dist/pane-cards.js). This checks
+# that they match src/ - run `npm run build` before committing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+      - run: git diff --exit-code -- dist lab
