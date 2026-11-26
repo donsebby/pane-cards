@@ -1,5 +1,5 @@
-// Pane Cards 0.1.1 - https://github.com/donsebby/pane-cards (MIT)
-const CARD_VERSION = '0.1.1';
+// Pane Cards 0.2.0 - https://github.com/donsebby/pane-cards (MIT)
+const CARD_VERSION = '0.2.0';
 
 // src/core/style.js
 var INK = "var(--primary-text-color, #fff)";
@@ -190,6 +190,11 @@ var PaneCard = class _PaneCard extends HTMLElement {
   }
   validateConfig() {
   }
+  // null: own panel, none inside a pop-up. Cards that are sections of the
+  // page rather than panels (today, rooms) return false.
+  defaultFrame() {
+    return null;
+  }
   build() {
   }
   update() {
@@ -284,7 +289,8 @@ var PaneCard = class _PaneCard extends HTMLElement {
   _applyCardClasses() {
     const c = this._config;
     this.cardEl.classList.toggle("solid", this.isSolid());
-    this.cardEl.classList.toggle("frameless", c.frame === false || c.frame == null && !!this._inPopup);
+    const frame = c.frame ?? this.defaultFrame();
+    this.cardEl.classList.toggle("frameless", frame === false || frame == null && !!this._inPopup);
     this.cardEl.classList.toggle("calm", !this.glowOn());
   }
   // ---- look ----------------------------------------------------------
@@ -485,9 +491,9 @@ var PaneEditor = class extends HTMLElement {
   }
   // Drops empty values so a config saved from the editor stays as short as
   // a hand-written one.
-  static clean(obj) {
+  static clean(obj2) {
     const out = {};
-    Object.entries(obj).forEach(([k, v]) => {
+    Object.entries(obj2).forEach(([k, v]) => {
       if (v === "" || v == null) return;
       if (typeof v === "object" && !Array.isArray(v) && Object.keys(v).length === 0) return;
       out[k] = v;
@@ -1453,6 +1459,1176 @@ var PaneTileCardEditor = class extends PaneEditor {
   }
 };
 
+// src/cards/rooms.js
+var HGC_INK = "var(--text-1, var(--primary-text-color, #fff))";
+var HGC_INK2 = "var(--text-2, var(--secondary-text-color, rgba(255,255,255,.65)))";
+var HGC_COLORS = ["#FFB020", "#8C7BFF", "#4F8CFF", "#FF5FA2", "#34C759", "#C86BFF", "#2EC4B6", "#FF7A45"];
+var HGC_HINT = { window: "#2EC4B6", heat: "#FF7A45", media: "#A66CFF", light: "#FFB020" };
+var hgcEsc = (s) => String(s ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
+var hgcDeg = (v) => Number.isFinite(v) ? v.toFixed(1).replace(".", ",") + "\xB0" : "\u2013";
+var GLASS_BG = (tint, a, b) => `linear-gradient(160deg, color-mix(in srgb, ${tint} ${a}, color-mix(in srgb, #fff 16%, transparent)), color-mix(in srgb, ${tint} ${b}, color-mix(in srgb, #fff 4%, transparent)))`;
+var HGC_GLASS = `
+  .card:not(.solid) .blk, .card:not(.solid) .tiles .room {
+    -webkit-backdrop-filter: var(--pane-backdrop, blur(22px) saturate(170%)); backdrop-filter: var(--pane-backdrop, blur(22px) saturate(170%));
+    border: 1px solid color-mix(in srgb, #fff 22%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 45%, transparent), 0 14px 32px rgba(6, 10, 30, 0.22); }
+  .card:not(.solid) .blk { background: ${GLASS_BG("#fff", "0%", "0%")}; }
+  .card:not(.solid) .tiles .room { background: ${GLASS_BG("var(--rc)", "30%", "14%")}; }
+  .card:not(.solid) .tiles .room:hover { background: ${GLASS_BG("var(--rc)", "40%", "20%")}; }
+  .card:not(.solid) .chip { box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 50%, transparent); }
+`;
+var HGC_STYLE = `
+  :host { display:block; font-family: -apple-system, "SF Pro Text", Inter, var(--paper-font-body1_-_font-family, Helvetica), sans-serif; color:${HGC_INK}; }
+  .blk { background: var(--surface, color-mix(in srgb, ${HGC_INK} 7%, transparent)); border-radius: var(--lg-radius, 20px);
+    backdrop-filter: var(--pane-backdrop, none); -webkit-backdrop-filter: var(--pane-backdrop, none);
+    box-shadow: inset 0 0 0 1px var(--pane-border, rgba(255,255,255,.06)); padding:6px 6px 8px; }
+  .bt { color:${HGC_INK2}; font-size:13px; font-weight:500; padding:8px 12px 6px; }
+  .grid { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap:6px; padding:0 4px; }
+  .room { display:flex; flex-direction:column; gap:4px; min-height:92px; box-sizing:border-box; padding:12px 14px; border-radius:16px;
+    background: color-mix(in srgb, ${HGC_INK} 5%, transparent); cursor:pointer; -webkit-tap-highlight-color:transparent; transition: background .2s ease; }
+  .room:hover { background: color-mix(in srgb, ${HGC_INK} 9%, transparent); }
+  .rn { font-size:13px; color:${HGC_INK2}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rt { font-size:26px; font-weight:500; line-height:1.1; font-variant-numeric: tabular-nums; letter-spacing:-0.01em; }
+  .rh { font-size:12px; color: var(--h, ${HGC_INK2}); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-height:15px; }
+  .row { display:flex; align-items:center; gap:12px; min-height:52px; box-sizing:border-box; padding:6px 12px; margin-top:6px; border-radius:14px; }
+  .row ha-icon { --mdc-icon-size:22px; color:#FFC145; flex:none; }
+  .t { flex:1; min-width:0; }
+  .tt { font-size:15px; font-weight:500; }
+  .ts { font-size:13px; color:${HGC_INK2}; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .btn { display:inline-flex; align-items:center; gap:6px; height:40px; padding:0 16px; border-radius:999px; flex:none;
+    background: color-mix(in srgb, ${HGC_INK} 12%, transparent); font-size:14px; font-weight:500; cursor:pointer; -webkit-tap-highlight-color:transparent; }
+  .btn ha-icon { --mdc-icon-size:18px; color:inherit; }
+  .tiles .head { font-size:15px; font-weight:700; padding:2px 4px 8px; color:${HGC_INK}; }
+  .tiles .grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:10px; padding:0; }
+  .tiles .room { min-height:104px; justify-content:space-between; padding:12px 14px; border-radius: var(--lg-radius, 20px);
+    background: color-mix(in srgb, var(--rc) var(--room-tint, 26%), var(--surface, rgba(255,255,255,.5)));
+    border: 1px solid var(--pane-border, rgba(255,255,255,.08));
+    backdrop-filter: var(--pane-backdrop, none); -webkit-backdrop-filter: var(--pane-backdrop, none); }
+  .tiles .room:hover { background: color-mix(in srgb, var(--rc) calc(var(--room-tint, 26%) + 8%), var(--surface, rgba(255,255,255,.5))); }
+  .tiles .rn { font-size:14px; font-weight:600; color:${HGC_INK}; order:3; }
+  .tiles .rt { font-size:24px; font-weight:600; order:2; }
+  .tiles .rh { order:1; min-height:20px; }
+  .pill { display:inline-block; font-size:11px; font-weight:600; padding:2px 8px; border-radius:999px; color:${HGC_INK};
+    background: color-mix(in srgb, var(--hc) 30%, transparent); max-width:100%; box-sizing:border-box; overflow:hidden; text-overflow:ellipsis; }
+  .tiles .blk { margin-top:10px; }
+  .tiles .row { margin-top:0; }
+  .chip { width:34px; height:34px; border-radius:10px; display:grid; place-items:center; flex:none; background:#FFB020; }
+  .chip ha-icon { --mdc-icon-size:20px; color:#3A2600 !important; }
+  .tiles .btn { background: color-mix(in srgb, #FFB020 30%, transparent); }
+  @media (max-width: 600px) {
+    .tiles .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap:8px; }
+    .tiles .room { min-height:100px; padding:10px 12px; }
+    .tiles .rt { font-size:20px; }
+    .tiles .rn { font-size:13px; }
+  }
+  @media (max-width: 600px) {
+    .root:not(.tiles) .grid { grid-template-columns: 1fr; gap:0; }
+    .root:not(.tiles) .room { flex-direction:row; align-items:center; min-height:48px; padding:6px 12px; background:none; gap:10px; }
+    .root:not(.tiles) .rn { flex:1; font-size:15px; font-weight:500; color:${HGC_INK}; }
+    .root:not(.tiles) .rh { order:2; min-height:0; }
+    .root:not(.tiles) .rt { order:3; font-size:17px; width:56px; text-align:right; }
+  }
+`;
+var PaneRoomsCard = class _PaneRoomsCard extends PaneCard {
+  static get styles() {
+    return HGC_STYLE + HGC_GLASS;
+  }
+  static getStubConfig(hass) {
+    const climates = Object.keys(hass?.states || {}).filter((e) => e.startsWith("climate.")).slice(0, 3);
+    return { title: "R\xE4ume", tiles: true, rooms: climates.length ? climates.map((c) => ({ name: hass.states[c].attributes.friendly_name || c, climate: c })) : [{ name: "Wohnzimmer" }] };
+  }
+  validateConfig(config) {
+    if (!Array.isArray(config.rooms)) throw new Error('Pane Rooms Card: "rooms" fehlt.');
+  }
+  defaultFrame() {
+    return false;
+  }
+  build() {
+    this._config = { title: "Zuhause", ...this._config };
+    if (!this._root) {
+      this._root = document.createElement("div");
+      this._root.className = "root";
+      this.bodyEl.appendChild(this._root);
+      this._root.addEventListener("click", (e) => this._onClick(e));
+    }
+    this._sig = null;
+  }
+  // Renders only when one of the watched entities changed.
+  update() {
+    const hass = this._hass;
+    const sig = this._watched().map((id) => hass.states[id]?.last_updated).join("|");
+    if (sig !== this._sig) {
+      this._sig = sig;
+      this._render();
+    }
+  }
+  static getConfigElement() {
+    return document.createElement(_PaneRoomsCard.editorTag);
+  }
+  getCardSize() {
+    return 6;
+  }
+  getGridOptions() {
+    return { columns: "full" };
+  }
+  // Lights per area (entity area, else its device's area) and the labelled lamps.
+  _index() {
+    const h = this._hass;
+    if (this._idxFor === h.entities) return;
+    this._idxFor = h.entities;
+    const byArea = {}, labelled = [], lbl = this._config.lights_label;
+    for (const [id, e] of Object.entries(h.entities || {})) {
+      if (!id.startsWith("light.") || e.hidden) continue;
+      const area = e.area_id || e.device_id && h.devices?.[e.device_id]?.area_id;
+      const isLamp = !!lbl && (e.labels || []).includes(lbl);
+      if (isLamp) labelled.push(id);
+      if (area && (!lbl || isLamp)) (byArea[area] = byArea[area] || []).push(id);
+    }
+    this._lightsByArea = byArea;
+    this._lamps = labelled;
+  }
+  _watched() {
+    this._index();
+    const ids = [];
+    this._config.rooms.forEach((r) => {
+      ids.push(r.climate, r.temperature, ...r.windows || [], ...(r.media || []).map((m) => m.entity || m));
+      if (r.area) ids.push(...this._lightsByArea[r.area] || []);
+    });
+    ids.push(...this._lamps);
+    return ids.filter(Boolean);
+  }
+  _hint(r) {
+    const h = this._hass, on = (id) => h.states[id]?.state === "on";
+    const open = (r.windows || []).filter(on);
+    if (open.length) return ["Fenster offen", "#FFC145", "window"];
+    const cl = r.climate && h.states[r.climate];
+    if (cl && cl.attributes.hvac_action === "heating") {
+      const t = parseFloat(cl.attributes.temperature), cur = this._temp(r);
+      if (!Number.isFinite(t) || !Number.isFinite(cur) || cur < t - 0.5) return [Number.isFinite(t) ? `heizt auf ${hgcDeg(t)}` : "heizt", "#FF9E6B", "heat"];
+    }
+    for (const m of r.media || []) {
+      const st = h.states[m.entity || m];
+      if (st && st.state === "playing") return [`${m.name || st.attributes.friendly_name} spielt`, "var(--mood, #8FA8FF)", "media"];
+    }
+    const lights = (this._lightsByArea[r.area] || []).filter(on).length;
+    if (lights) return [lights === 1 ? "Licht an" : `${lights} Lampen an`, "", "light"];
+    return ["", "", ""];
+  }
+  _temp(r) {
+    const h = this._hass;
+    const s = r.temperature && h.states[r.temperature];
+    if (s && Number.isFinite(parseFloat(s.state))) return parseFloat(s.state);
+    const cl = r.climate && h.states[r.climate];
+    return cl ? parseFloat(cl.attributes.current_temperature) : NaN;
+  }
+  _render() {
+    if (!this._hass || !this._root) return;
+    const h = this._hass, c = this._config;
+    const tiles = !!c.tiles;
+    this._root.classList.toggle("tiles", tiles);
+    const rooms = c.rooms.map((r, i) => {
+      const [hint, col, kind] = this._hint(r);
+      if (tiles) {
+        const rc = r.color || HGC_COLORS[i % HGC_COLORS.length];
+        const pill = hint ? `<span class="pill" style="--hc:${HGC_HINT[kind] || "#9AA3B8"}">${hgcEsc(hint)}</span>` : "";
+        return `<div class="room" data-room="${i}" role="button" tabindex="0" style="--rc:${hgcEsc(rc)}"><span class="rh">${pill}</span>
+          <span class="rt">${hgcDeg(this._temp(r))}</span><span class="rn">${hgcEsc(r.name)}</span></div>`;
+      }
+      return `<div class="room" data-room="${i}" role="button" tabindex="0"><span class="rn">${hgcEsc(r.name)}</span>
+        <span class="rt">${hgcDeg(this._temp(r))}</span><span class="rh" style="${col ? `--h:${col}` : ""}">${hgcEsc(hint)}</span></div>`;
+    }).join("");
+    const on = this._lamps.filter((id) => h.states[id]?.state === "on");
+    const names = on.map((id) => h.states[id].attributes.friendly_name || id);
+    const lampIcon = tiles ? '<span class="chip"><ha-icon icon="mdi:lightbulb-on"></ha-icon></span>' : '<ha-icon icon="mdi:lightbulb-on-outline"></ha-icon>';
+    const lamps = on.length ? `<div class="row">${lampIcon}<div class="t"><div class="tt">${on.length === 1 ? hgcEsc(names[0]) + " ist an" : on.length + " Lampen an"}</div>${on.length > 1 ? `<div class="ts">${hgcEsc(names.slice(0, 3).join(", "))}${on.length > 3 ? " \u2026" : ""}</div>` : ""}</div><div class="btn" data-act="off" role="button" tabindex="0"><ha-icon icon="mdi:power"></ha-icon>Alle aus</div></div>` : "";
+    this._root.innerHTML = tiles ? `${c.title ? `<div class="head">${hgcEsc(c.title)}</div>` : ""}<div class="grid">${rooms}</div>${lamps ? `<div class="blk">${lamps}</div>` : ""}` : `<div class="blk"><div class="bt">${hgcEsc(c.title)}</div><div class="grid">${rooms}</div>${lamps}</div>`;
+  }
+  _onClick(e) {
+    if (e.target.closest('[data-act="off"]')) {
+      const on = this._lamps.filter((id2) => this._hass.states[id2]?.state === "on");
+      if (on.length) this._hass.callService("light", "turn_off", { entity_id: on });
+      this.dispatchEvent(new CustomEvent("haptic", { bubbles: true, composed: true, detail: "light" }));
+      return;
+    }
+    const el = e.target.closest("[data-room]");
+    if (!el) return;
+    const r = this._config.rooms[Number(el.dataset.room)];
+    if (!r) return;
+    if (r.navigate) {
+      history.pushState(null, "", r.navigate);
+      window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+      return;
+    }
+    const id = r.climate || r.temperature;
+    if (id) this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: id } }));
+  }
+};
+var ROOM_COLORS = [
+  { value: "auto", label: "Automatisch" },
+  { value: "#FFB020", label: "Gelb" },
+  { value: "#8C7BFF", label: "Violett" },
+  { value: "#4F8CFF", label: "Blau" },
+  { value: "#FF5FA2", label: "Pink" },
+  { value: "#34C759", label: "Gr\xFCn" },
+  { value: "#C86BFF", label: "Lila" },
+  { value: "#2EC4B6", label: "T\xFCrkis" },
+  { value: "#FF7A45", label: "Orange" }
+];
+var PaneRoomsCardEditor = class extends PaneEditor {
+  labels() {
+    return {
+      title: "Titel",
+      tiles: "Farbige Kacheln",
+      lights_label: "Label der Lampen",
+      look: "Look",
+      name: "Name",
+      area: "Bereich",
+      climate: "Thermostat",
+      temperature: "Temperatur-Sensor",
+      windows: "Fenster",
+      media: "Medien",
+      navigate: "Antippen \xF6ffnet",
+      color: "Farbe"
+    };
+  }
+  helpers() {
+    return {
+      lights_label: "Lampen mit diesem Label z\xE4hlen f\xFCr \u201EN Lampen an\u201C und \u201EAlle aus\u201C.",
+      area: "Eingeschaltete Lampen in diesem Bereich zeigen \u201ELicht an\u201C.",
+      temperature: "Leer = aktuelle Temperatur des Thermostats.",
+      navigate: "Zum Beispiel #raum-wohnzimmer f\xFCr ein Pop-up. Leer = Details von Thermostat oder Sensor."
+    };
+  }
+  sections() {
+    const c = this._config || {};
+    const top = { ...c, tiles: !!c.tiles, look: c.look || "theme" };
+    return [
+      {
+        title: "Karte",
+        schema: [
+          { name: "title", selector: { text: {} } },
+          { type: "grid", name: "", schema: [
+            { name: "tiles", selector: { boolean: {} } },
+            { name: "look", selector: { select: { mode: "dropdown", options: [{ value: "theme", label: "Vom Theme" }, { value: "glass", label: "Glass" }, { value: "solid", label: "Solid" }] } } }
+          ] },
+          { name: "lights_label", selector: { label: {} } }
+        ],
+        data: () => top,
+        set: (v) => {
+          const next = { ...this._config, ...v };
+          if (!next.tiles) delete next.tiles;
+          if (next.look === "theme") delete next.look;
+          const rooms = next.rooms;
+          const out = PaneEditor.clean(next);
+          out.rooms = rooms || [];
+          this.emit(out);
+        }
+      },
+      {
+        key: "rooms",
+        title: "R\xE4ume",
+        list: {
+          items: () => c.rooms || [],
+          set: (rooms) => this.emit({ ...this._config, rooms }),
+          create: () => ({ name: "Neuer Raum" }),
+          addLabel: "+ Raum hinzuf\xFCgen",
+          title: (r) => r.name,
+          subtitle: (r) => r.climate || r.temperature || "",
+          icon: () => "mdi:floor-plan",
+          schema: () => [
+            { name: "name", required: true, selector: { text: {} } },
+            { type: "grid", name: "", schema: [
+              { name: "area", selector: { area: {} } },
+              { name: "color", selector: { select: { mode: "dropdown", custom_value: true, options: ROOM_COLORS } } }
+            ] },
+            { name: "climate", selector: { entity: { domain: "climate" } } },
+            { name: "temperature", selector: { entity: { domain: "sensor", device_class: "temperature" } } },
+            { name: "windows", selector: { entity: { domain: "binary_sensor", multiple: true } } },
+            { name: "media", selector: { entity: { domain: "media_player", multiple: true } } },
+            { name: "navigate", selector: { text: {} } }
+          ],
+          data: (r) => ({ color: "auto", ...r, media: (r.media || []).map((m) => m.entity || m) }),
+          merge: (r, v) => {
+            const names = Object.fromEntries((r.media || []).map((m) => [m.entity || m, m.name]));
+            const next = PaneEditor.clean({ ...v });
+            if (next.color === "auto") delete next.color;
+            if (Array.isArray(next.windows) && !next.windows.length) delete next.windows;
+            if (Array.isArray(next.media)) {
+              if (!next.media.length) delete next.media;
+              else next.media = next.media.map((id) => names[id] ? { entity: id, name: names[id] } : { entity: id });
+            }
+            return next;
+          }
+        }
+      }
+    ];
+  }
+};
+
+// src/cards/today.js
+var TDC_DAYS = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+var TDC_MONTHS = ["Januar", "Februar", "M\xE4rz", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober", "November", "Dezember"];
+var tdcMon = (d) => {
+  const m = TDC_MONTHS[d.getMonth()];
+  return m.length <= 4 ? m : m.slice(0, 3) + ".";
+};
+var TDC_COND = {
+  "clear-night": ["Klar", "mdi:weather-night"],
+  cloudy: ["Bedeckt", "mdi:weather-cloudy"],
+  fog: ["Nebel", "mdi:weather-fog"],
+  hail: ["Hagel", "mdi:weather-hail"],
+  lightning: ["Gewitter", "mdi:weather-lightning"],
+  "lightning-rainy": ["Gewitter", "mdi:weather-lightning-rainy"],
+  partlycloudy: ["Heiter bis wolkig", "mdi:weather-partly-cloudy"],
+  pouring: ["Starkregen", "mdi:weather-pouring"],
+  rainy: ["Regen", "mdi:weather-rainy"],
+  snowy: ["Schnee", "mdi:weather-snowy"],
+  "snowy-rainy": ["Schneeregen", "mdi:weather-snowy-rainy"],
+  sunny: ["Sonnig", "mdi:weather-sunny"],
+  windy: ["Windig", "mdi:weather-windy"],
+  "windy-variant": ["Windig", "mdi:weather-windy-variant"],
+  exceptional: ["Unwetter", "mdi:alert"]
+};
+var TDC_COLORS = { indigo: "#7986cb", cyan: "#4dd0e1", teal: "#4db6ac", green: "#81c784", yellow: "#fdd835", pink: "#f06292", brown: "#a1887f", blue: "#64b5f6", red: "#e57373", orange: "#ffb74d", purple: "#ba68c8" };
+var tdcEsc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+var TDC_INK = "var(--text-1, var(--primary-text-color, #fff))";
+var TDC_INK2 = "var(--text-2, var(--secondary-text-color, rgba(255,255,255,.65)))";
+var TDC_GLASS = `
+  .card:not(.solid) .blk, .card:not(.solid) .colorful .wxpill {
+    background: linear-gradient(160deg, color-mix(in srgb, #fff 16%, transparent), color-mix(in srgb, #fff 5%, transparent) 45%, color-mix(in srgb, #fff 8%, transparent));
+    -webkit-backdrop-filter: var(--pane-backdrop, blur(22px) saturate(170%)); backdrop-filter: var(--pane-backdrop, blur(22px) saturate(170%));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 20%, transparent), inset 0 1px 0 color-mix(in srgb, #fff 45%, transparent), 0 14px 32px rgba(6, 10, 30, 0.22); }
+  .card:not(.solid) .colorful .row > ha-icon:first-child { box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 35%, transparent); }
+`;
+var TDC_STYLE = `
+  :host { display:block; font-family: -apple-system, "SF Pro Text", Inter, var(--paper-font-body1_-_font-family, Helvetica), sans-serif; color:${TDC_INK}; }
+  .hero { min-height: clamp(150px, 20vh, 240px); display:flex; flex-direction:column; justify-content:flex-end; padding: 4px 6px 22px; }
+  /* Wide screens: other columns start at the top, so the hero does too. */
+  @media (min-width: 1024px) { .hero { min-height:0; justify-content:flex-start; padding-top:8px; } }
+  .date { color:${TDC_INK2}; font-size:15px; font-weight:500; }
+  .wxrow { display:flex; align-items:center; gap:16px; margin-top:4px; cursor:pointer; -webkit-tap-highlight-color: transparent; }
+  .wxrow[data-nav=""] { cursor:default; }
+  .temp { font-size:76px; font-weight:300; line-height:1; letter-spacing:-0.03em; font-variant-numeric: tabular-nums; }
+  .cond { display:flex; flex-direction:column; gap:3px; min-width:0; }
+  .cond b { font-size:20px; font-weight:500; display:flex; align-items:center; gap:6px; }
+  .cond b ha-icon { --mdc-icon-size:22px; color: var(--mood, ${TDC_INK}); }
+  .cond span { color:${TDC_INK2}; font-size:15px; font-variant-numeric: tabular-nums; }
+  .greet { font-size:17px; font-weight:500; margin-top:14px; }
+  .say { font-size:22px; font-weight:600; line-height:1.25; margin-top:4px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; letter-spacing:-0.01em; }
+  .blk { background: var(--surface, color-mix(in srgb, ${TDC_INK} 7%, transparent)); border-radius: var(--lg-radius, 20px);
+    backdrop-filter: var(--pane-backdrop, none); -webkit-backdrop-filter: var(--pane-backdrop, none);
+    box-shadow: inset 0 0 0 1px var(--pane-border, rgba(255,255,255,.06)); padding:6px; margin-bottom:12px; }
+  .bt { color:${TDC_INK2}; font-size:13px; font-weight:500; padding:8px 12px 4px; }
+  .row { position:relative; display:flex; align-items:center; gap:12px; min-height:48px; box-sizing:border-box; padding:4px 12px; border-radius:14px;
+    cursor:pointer; -webkit-tap-highlight-color: transparent; transition: background .2s ease; }
+  .row:active { background: color-mix(in srgb, ${TDC_INK} 6%, transparent); }
+  .row[data-nav=""], .row:not([data-nav]) { cursor:default; }
+  .row[data-nav=""]:active, .row:not([data-nav]):active { background:none; }
+  .row ha-icon { --mdc-icon-size:20px; flex:none; color: var(--c, ${TDC_INK2}); }
+  .row .t { flex:1; min-width:0; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row .t small { color:${TDC_INK2}; font-size:15px; }
+  .row .m { flex:none; color:${TDC_INK2}; font-size:15px; font-variant-numeric: tabular-nums; }
+  .row.act { min-height:56px; padding-left:16px; }
+  .row.act::before { content:""; position:absolute; left:4px; top:12px; bottom:12px; width:3px; border-radius:2px; background: var(--c, #FFC145); }
+  .row.act ha-icon { --mdc-icon-size:24px; }
+  .row.act .tt { font-size:17px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .row.act .ts { color:${TDC_INK2}; font-size:13px; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .btn { flex:none; display:flex; align-items:center; gap:6px; min-height:36px; padding:0 14px; border-radius:18px; font-size:15px; font-weight:500;
+    color:${TDC_INK}; background: color-mix(in srgb, ${TDC_INK} 14%, transparent); }
+  .btn ha-icon { --mdc-icon-size:18px; color: inherit; }
+  .dot { width:8px; height:8px; border-radius:50%; flex:none; margin:0 6px; background: var(--c); }
+  .nxl { display:flex; gap:12px; margin-top:3px; overflow:hidden; }
+  .nx { display:inline-flex; align-items:center; gap:5px; font-size:13px; color:${TDC_INK2}; white-space:nowrap; }
+  .nx i { width:6px; height:6px; border-radius:50%; background: var(--c); }
+  .nx i + i { margin-left:-2px; }
+  .row.waste { background: color-mix(in srgb, #ffb454 13%, transparent); }
+  .row.waste::before { background: var(--stripe); }
+  .row.waste > ha-icon { color:#ffb454; }
+  .bin { display:inline-flex; align-items:center; gap:6px; }
+  .bin i { width:10px; height:10px; border-radius:50%; background: var(--b); box-shadow: 0 0 0 1px rgba(255,255,255,.18); flex:none; }
+  /* Waste due: fixed title, one chip per bin on its own line (no truncated "Gelber Sack + \u2026") */
+  .row.waste { flex-wrap:wrap; row-gap:8px; padding-top:10px; padding-bottom:10px;
+    background: color-mix(in srgb, var(--c) 15%, transparent); }
+  .row.waste .bins { flex-basis:100%; display:flex; flex-wrap:wrap; gap:6px; padding-left:36px; }
+  .chip { display:inline-flex; align-items:center; gap:6px; height:26px; padding:0 10px 0 8px; border-radius:999px; font-size:13px; font-weight:600;
+    color:${TDC_INK}; background: color-mix(in srgb, var(--b) 30%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--b) 45%, transparent); }
+  .chip i { width:10px; height:10px; border-radius:50%; background: var(--b); flex:none; }
+  .more { color:${TDC_INK2}; font-size:14px; min-height:40px; }
+  .more ha-icon { --mdc-icon-size:18px; }
+  .sep { height:1px; margin:2px 12px; background: color-mix(in srgb, ${TDC_INK} 8%, transparent); }
+  /* style: colorful \u2013 coloured icon squares, compact weather pill, big greeting */
+  .colorful .row > ha-icon:first-child { --mdc-icon-size:18px; width:34px; height:34px; box-sizing:border-box; padding:0; border-radius:10px;
+    display:flex; align-items:center; justify-content:center; line-height:0; --ha-icon-display:flex;
+    color: var(--c, ${TDC_INK2}); background: color-mix(in srgb, var(--c, ${TDC_INK2}) 22%, transparent); }
+  .colorful .row.act::before { display:none; }
+  .colorful .row.act { padding-left:12px; }
+  .colorful .row.act > ha-icon:first-child { --mdc-icon-size:20px; color:#fff; background: var(--c, #FFB020); }
+  .colorful .row.more > ha-icon:first-child { background:none; color:${TDC_INK2}; }
+  .colorful .row.waste { background: color-mix(in srgb, var(--c) 18%, transparent); }
+  .colorful .row.waste > ha-icon:first-child { background: color-mix(in srgb, ${TDC_INK} 16%, transparent); color:${TDC_INK}; }
+  .colorful .row.waste .bins { padding-left:46px; }
+  .colorful .btn { background: color-mix(in srgb, var(--c, ${TDC_INK}) 26%, transparent); }
+  .colorful .hero { min-height:0; padding: 4px 6px 16px; }
+  .colorful .top { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  .colorful .wxpill { display:inline-flex; align-items:center; gap:6px; height:32px; padding:0 12px; border-radius:999px; font-size:14px; font-weight:600;
+    background: var(--surface, color-mix(in srgb, ${TDC_INK} 10%, transparent)); box-shadow: inset 0 0 0 1px var(--pane-border, rgba(255,255,255,.08));
+    backdrop-filter: var(--pane-backdrop, none); -webkit-backdrop-filter: var(--pane-backdrop, none); cursor:pointer; white-space:nowrap; font-variant-numeric: tabular-nums; }
+  .colorful .wxpill ha-icon { --mdc-icon-size:18px; color: var(--mood, ${TDC_INK}); }
+  .colorful .greet { font-size:26px; font-weight:700; margin-top:10px; letter-spacing:-0.01em; }
+  .colorful .say { font-size:17px; font-weight:500; margin-top:6px; line-height:1.35; color:${TDC_INK2}; }
+`;
+var tdcDeg = (v) => v == null || !Number.isFinite(Number(v)) ? "" : String(Math.round(Number(v))).replace("-", "\u2212") + "\xB0";
+var PaneTodayCard = class _PaneTodayCard extends PaneCard {
+  static get styles() {
+    return TDC_STYLE + TDC_GLASS;
+  }
+  static getStubConfig(hass) {
+    const weather = Object.keys(hass?.states || {}).find((e) => e.startsWith("weather."));
+    const calendars = Object.keys(hass?.states || {}).filter((e) => e.startsWith("calendar.")).slice(0, 2).map((entity) => ({ entity }));
+    return { weather, calendars };
+  }
+  defaultFrame() {
+    return false;
+  }
+  build() {
+    this._config = { max_events: 3, ...this._config };
+    if (!this._root) {
+      this._root = document.createElement("div");
+      this._root.className = "root";
+      this.bodyEl.appendChild(this._root);
+      this._root.addEventListener("click", (e) => this._onClick(e));
+    }
+    this._events = null;
+    this._eventsAt = 0;
+    this._fcAt = 0;
+    this._sig = null;
+  }
+  // Calendar and forecast are fetched now and then; the card renders only
+  // when one of the watched entities changed (plus once a minute for times).
+  update() {
+    const hass = this._hass;
+    if (Date.now() - this._eventsAt > 15 * 6e4) this._loadEvents();
+    if (Date.now() - this._fcAt > 30 * 6e4) this._loadForecast();
+    const sig = this._watched().map((id) => hass.states[id]?.last_updated).join("|");
+    if (sig !== this._sig) {
+      const calChanged = this._sig && this._calSig !== this._calSignature();
+      this._sig = sig;
+      if (calChanged) this._loadEvents();
+      this._render();
+    }
+  }
+  connectedCallback() {
+    super.connectedCallback();
+    clearInterval(this._timer);
+    this._timer = setInterval(() => this._render(), 6e4);
+  }
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    clearInterval(this._timer);
+  }
+  static getConfigElement() {
+    return document.createElement(_PaneTodayCard.editorTag);
+  }
+  getCardSize() {
+    return 5;
+  }
+  getGridOptions() {
+    return { columns: "full", rows: "auto" };
+  }
+  _watched() {
+    const c = this._config, ids = [c.weather, "sun.sun"];
+    (c.calendars || []).forEach((x) => ids.push(x.entity));
+    const w = c.waste || {};
+    (w.entities || []).forEach((x) => ids.push(x.entity));
+    if (w.done_entity) ids.push(w.done_entity);
+    const e = c.energy || {};
+    ids.push(e.pv_today, e.pv_tomorrow, e.battery);
+    ((c.packages || {}).items || []).forEach((x) => ids.push(x.entity));
+    (c.appliances || []).forEach((a) => ids.push(a.state, a.finish, a.remaining, a.door, a.power));
+    if (c.goodnight) {
+      this._gnWindows().forEach((x) => ids.push(x.entity));
+      this._gnLights().forEach((x) => ids.push(x));
+    }
+    const b = c.bath || {};
+    ids.push(b.script, b.status);
+    if (c.warning) ids.push(c.warning.entity, c.warning.detail);
+    (c.hints || []).forEach((x) => {
+      ids.push(x.entity);
+      (x.detail || []).forEach((d) => ids.push(d.entity));
+    });
+    (c.status || []).forEach((x) => ids.push(x.entity, x.when, ...(x.entities || []).map((e2) => e2.entity || e2)));
+    if ((c.packages || {}).entity) ids.push(c.packages.entity);
+    if (c.updates && this._hass) Object.keys(this._hass.states).forEach((e2) => {
+      if (e2.startsWith("update.")) ids.push(e2);
+    });
+    return ids.filter(Boolean);
+  }
+  _calSignature() {
+    return (this._config.calendars || []).map((x) => this._hass.states[x.entity]?.last_changed).join("|");
+  }
+  async _loadEvents() {
+    const cals = this._config.calendars || [];
+    if (!cals.length || !this._hass) return;
+    this._eventsAt = Date.now();
+    this._calSig = this._calSignature();
+    const start = /* @__PURE__ */ new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(end.getDate() + 2);
+    const q = `?start=${encodeURIComponent(start.toISOString())}&end=${encodeURIComponent(end.toISOString())}`;
+    const out = [];
+    await Promise.all(cals.map(async (cal) => {
+      try {
+        const list = await this._hass.callApi("GET", `calendars/${cal.entity}${q}`);
+        for (const ev of list || []) {
+          const allDay = !!ev.start.date;
+          const s = allDay ? /* @__PURE__ */ new Date(ev.start.date + "T00:00:00") : new Date(ev.start.dateTime);
+          const en = allDay ? /* @__PURE__ */ new Date(ev.end.date + "T00:00:00") : new Date(ev.end.dateTime);
+          out.push({ title: ev.summary || "(ohne Titel)", start: s, end: en, allDay, color: TDC_COLORS[cal.color] || cal.color || "#90a4ae" });
+        }
+      } catch (e) {
+      }
+    }));
+    this._events = out.sort((a, b) => a.allDay === b.allDay ? a.start - b.start : a.allDay ? -1 : 1);
+    this._render();
+  }
+  async _loadForecast() {
+    const id = this._config.weather;
+    if (!id || !this._hass?.states[id]) return;
+    this._fcAt = Date.now();
+    try {
+      const res = await this._hass.callWS({
+        type: "call_service",
+        domain: "weather",
+        service: "get_forecasts",
+        service_data: { type: "daily" },
+        target: { entity_id: id },
+        return_response: true
+      });
+      this._fcList = res?.response?.[id]?.forecast || [];
+      this._fc = this._fcList[0] || null;
+      this._render();
+    } catch (e) {
+    }
+  }
+  _num(id, d = 1) {
+    const v = parseFloat(this._hass.states[id]?.state);
+    return Number.isFinite(v) ? v.toFixed(d).replace(".", ",") : "\u2013";
+  }
+  _wasteRow() {
+    const w = this._config.waste;
+    if (!w || !w.entities) return "";
+    const today = /* @__PURE__ */ new Date();
+    today.setHours(0, 0, 0, 0);
+    const items = [];
+    w.entities.forEach((cfg) => {
+      const st = this._hass.states[cfg.entity];
+      if (!st) return;
+      const next2 = Object.keys(st.attributes).filter((k) => /^\d{4}-\d{2}-\d{2}$/.test(k)).sort().map((k) => {
+        const [y, m, d] = k.split("-").map(Number);
+        return new Date(y, m - 1, d);
+      }).find((d) => d >= today);
+      if (next2) items.push({ cfg, days: Math.round((next2 - today) / 864e5), date: next2 });
+    });
+    const vis = items.filter((x) => x.cfg.show_within_days == null || x.days <= x.cfg.show_within_days).sort((a, b) => a.days - b.days);
+    this._wasteDue = null;
+    this._wasteAct = false;
+    if (!vis.length) return "";
+    const days = vis[0].days;
+    const hero = vis.filter((x) => x.days === days);
+    const wd = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
+    const whenS = (x) => x.days === 0 ? "heute" : x.days === 1 ? "morgen" : x.days < 7 ? wd[x.date.getDay()] : `${x.date.getDate()}. ${tdcMon(x.date)}`;
+    const groups = [];
+    vis.filter((x) => x.days !== days).forEach((x) => {
+      const g = groups.find((gg) => gg.days === x.days);
+      if (g) g.items.push(x);
+      else if (groups.length < 2) groups.push({ days: x.days, items: [x] });
+    });
+    const next = groups.map((g) => `<span class="nx">${g.items.map((x) => `<i style="--c:${x.cfg.color || "#9e9e9e"}"></i>`).join("")}${g.items.map((x) => tdcEsc(x.cfg.short || x.cfg.name)).join(" + ")} \xB7 ${whenS(g.items[0])}</span>`).join("");
+    const nextHtml = next ? `<div class="nxl">${next}</div>` : "";
+    const names = hero.map((x) => x.cfg.name).join(" + ");
+    const hour = (/* @__PURE__ */ new Date()).getHours();
+    const from = w.evening_from ?? 17, until = w.morning_until ?? 9;
+    const due = days === 1 && hour >= from || days === 0 && hour < until;
+    let done = false;
+    const btn = w.done_entity && this._hass.states[w.done_entity];
+    if (due && btn) {
+      const since = new Date(hero[0].date);
+      since.setDate(since.getDate() - 1);
+      since.setHours(from, 0, 0, 0);
+      const pressed = new Date(btn.state);
+      done = !isNaN(pressed) && pressed >= since;
+    }
+    const alert = due && !done;
+    const when = days <= 1 ? whenS(hero[0]) : days < 7 ? TDC_DAYS[hero[0].date.getDay()] : `in ${days} Tagen`;
+    const color = hero[0].cfg.color || "#9e9e9e";
+    this._wasteDue = alert ? `${names} ${days === 1 ? "heute Abend" : "jetzt"} rausstellen.` : null;
+    this._wasteAct = alert;
+    if (alert) {
+      const cols = hero.map((x) => x.cfg.color || "#9e9e9e");
+      const stripe = cols.length > 1 ? `linear-gradient(${cols.map((c2, i) => `${c2} ${i * 100 / cols.length}% ${(i + 1) * 100 / cols.length}%`).join(", ")})` : cols[0];
+      const title = "M\xFCll rausstellen";
+      const sub = days === 1 ? "Abholung morgen fr\xFCh" : "Abholung heute";
+      const chips = `<div class="bins">${hero.map((x) => `<span class="chip" style="--b:${x.cfg.color || "#9e9e9e"}"><i></i>${tdcEsc(x.cfg.name)}</span>`).join("")}</div>`;
+      return `<div class="row act waste" data-nav="${w.navigate || ""}" style="--c:${color};--stripe:${stripe}"><ha-icon icon="mdi:trash-can-outline"></ha-icon>
+        <div class="t"><div class="tt">${title}</div><div class="ts">${sub}</div></div>
+        ${w.done_entity ? '<div class="btn" data-act="waste-done"><ha-icon icon="mdi:check"></ha-icon>Erledigt</div>' : ""}${chips}</div>`;
+    }
+    return `<div class="row" data-nav="${w.navigate || ""}" style="--c:${color}"><ha-icon icon="mdi:trash-can-outline"></ha-icon>
+      <div class="t">${names} <small>\xB7 ${when}${done ? " \xB7 rausgestellt" : ""}</small>${nextHtml}</div></div>`;
+  }
+  _eventRows() {
+    const c = this._config;
+    if (!c.calendars) return [];
+    if (this._events === null) return [`<div class="row"><ha-icon icon="mdi:calendar-blank-outline"></ha-icon><div class="t"><small>Termine laden \u2026</small></div></div>`];
+    const now = /* @__PURE__ */ new Date();
+    const today0 = /* @__PURE__ */ new Date();
+    today0.setHours(0, 0, 0, 0);
+    const tom0 = new Date(today0);
+    tom0.setDate(tom0.getDate() + 1);
+    const tom1 = new Date(tom0);
+    tom1.setDate(tom1.getDate() + 1);
+    const pad = (n) => String(n).padStart(2, "0");
+    const fmt = (e) => e.allDay ? "Ganzt\xE4gig" : `${pad(e.start.getHours())}:${pad(e.start.getMinutes())}`;
+    let list = this._events.filter((e) => e.start < tom0 && e.end > now);
+    let label = "";
+    if (this._evening()) {
+      list = this._events.filter((e) => e.start >= tom0 && e.start < tom1 || e.allDay && e.start < tom1 && e.end > tom0);
+    } else if (!list.length) {
+      list = this._events.filter((e) => e.start >= tom0 && e.start < tom1 || e.allDay && e.start < tom1 && e.end > tom0);
+      label = "Morgen ";
+    }
+    const rows = list.slice(0, c.max_events).map((e) => `<div class="row" data-nav="${c.calendar_navigate || ""}" style="--c:${e.color}">
+      <span class="dot"></span><div class="t">${tdcEsc(e.title)}</div><div class="m">${label}${fmt(e)}</div></div>`);
+    if (!rows.length) return [];
+    if (list.length > c.max_events) rows.push(`<div class="row" data-nav="${c.calendar_navigate || ""}"><span class="dot" style="--c:transparent"></span><div class="t"><small>+ ${list.length - c.max_events} weitere</small></div></div>`);
+    return rows;
+  }
+  _evening() {
+    return (/* @__PURE__ */ new Date()).getHours() >= (this._config.evening_from ?? 18);
+  }
+  _hm(d) {
+    return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+  }
+  // Appliances: running -> "fertig um HH:MM", finished -> "fertig – ausräumen" until the door opened.
+  _applianceRows() {
+    const h = this._hass, out = [], run = [], warn = [];
+    (this._config.appliances || []).forEach((a) => {
+      const st = h.states[a.state];
+      if (!st) return;
+      let s = String(st.state).toLowerCase();
+      const pw = a.power && parseFloat(h.states[a.power]?.state);
+      const byPower = Number.isFinite(pw) && pw > (a.power_above ?? 20) && !(a.run || []).includes(s);
+      if (byPower) s = (a.run || ["run"])[0];
+      if ((a.run || []).includes(s)) {
+        let fin = null;
+        const ts = !byPower && a.finish && h.states[a.finish];
+        if (ts && !isNaN(new Date(ts.state))) fin = new Date(ts.state);
+        const rem = !byPower && a.remaining && h.states[a.remaining];
+        if (!fin && rem && Number.isFinite(parseFloat(rem.state)) && Date.now() - new Date(rem.last_changed) < 15 * 6e4) {
+          fin = new Date(new Date(rem.last_changed).getTime() + parseFloat(rem.state) * 36e5);
+        }
+        const when = fin && fin > /* @__PURE__ */ new Date() ? ` <small>\xB7 fertig um ${this._hm(fin)}</small>` : " <small>\xB7 l\xE4uft</small>";
+        run.push(`<div class="row" data-nav="${this._navOrMore(a, a.state)}" style="--c:${a.color || "#90a4ae"}"><ha-icon icon="${a.icon || "mdi:washing-machine"}"></ha-icon><div class="t">${a.name}${when}</div></div>`);
+      } else if ((a.done || []).includes(s)) {
+        const doneAt = new Date(st.last_changed);
+        const door = a.door && h.states[a.door];
+        const emptied = door ? new Date(door.last_changed) > doneAt : Date.now() - doneAt > (a.done_hours ?? 2) * 36e5;
+        if (!emptied) {
+          const row = `<div class="row act" data-nav="${this._navOrMore(a, a.state)}" style="--c:${a.color || "#4CD08A"}"><ha-icon icon="${a.icon || "mdi:washing-machine"}"></ha-icon><div class="t"><div class="tt">${a.name} ausr\xE4umen</div><div class="ts">fertig seit ${this._hm(doneAt)} Uhr</div></div></div>`;
+          out.push(row);
+          warn.push(a.name);
+        }
+      }
+    });
+    this._applianceWarn = warn;
+    this._applianceRun = run;
+    return out;
+  }
+  _visible(x) {
+    return !x.admin_only || this._hass.user?.is_admin;
+  }
+  // Tap target: the configured navigate path, otherwise the entity's more-info dialog.
+  _navOrMore(x, id) {
+    return x.navigate || (id && x.more_info !== false ? "more-info:" + (x.more_info || id) : "");
+  }
+  // Hints: one action row per active warning entity, the detail lists what triggered it.
+  _hintRows(gn) {
+    const h = this._hass;
+    return (this._config.hints || []).filter((x) => this._visible(x) && h.states[x.entity]?.state === "on" && !(x.night_skip && gn && gn.open)).map((x) => {
+      const names = (x.detail || []).filter((d) => {
+        const st = h.states[d.entity];
+        if (!st) return false;
+        if (d.above != null) return parseFloat(st.state) > d.above;
+        const v = String(st.state).toLowerCase();
+        if (d.not_states) return !d.not_states.includes(v) && !["unavailable", "unknown"].includes(v);
+        return (d.states || ["on"]).includes(String(st.state).toLowerCase());
+      }).map((d) => tdcEsc(d.name));
+      const list = names.length > 3 ? `${names.slice(0, 2).join(", ")} und ${names.length - 2} weitere` : names.join(", ");
+      const sub = names.length ? list : x.text ? tdcEsc(x.text) : "";
+      return `<div class="row act" data-nav="${x.navigate || ""}" style="--c:${x.color || "#FF8A65"}"><ha-icon icon="${x.icon || "mdi:alert-outline"}"></ha-icon><div class="t"><div class="tt">${tdcEsc(x.title)}</div>${sub ? `<div class="ts">${sub}</div>` : ""}</div></div>`;
+    });
+  }
+  // Status: calm rows for things that are running right now (vacuum, printer, media).
+  // kind: 'all' (default), 'calm' (running things only) or 'alerts' (alert rows + updates).
+  _statusRows(kind = "all") {
+    const h = this._hass, out = [];
+    (this._config.status || []).forEach((x) => {
+      if (!this._visible(x)) return;
+      const ids = (x.entities || [x.entity]).map((e) => e.entity || e);
+      const names = Object.fromEntries((x.entities || []).filter((e) => e.entity).map((e) => [e.entity, e.name]));
+      const want = x.states || [];
+      const fresh = (st2) => st2.state !== "paused" || x.paused_minutes == null || Date.now() - new Date(st2.last_changed) < x.paused_minutes * 6e4;
+      let st = null;
+      if (x.when) {
+        if (h.states[x.when]?.state !== "on") return;
+        st = h.states[ids[0]];
+      } else {
+        const cand = ids.map((id) => h.states[id]).filter((v) => v && want.includes(String(v.state).toLowerCase()) && fresh(v));
+        st = cand.find((v) => v.state !== "paused") || cand[0];
+      }
+      if (!st) return;
+      const s = String(st.state).toLowerCase();
+      const alert = (x.alert_states || []).includes(s);
+      const a = st.attributes || {};
+      let text = x.attribute && a[x.attribute] || h.formatEntityState?.(st) || st.state;
+      if (x.attribute && a[x.attribute] && s === "paused") text += " \xB7 pausiert";
+      const row = `<div class="row${alert ? " act" : ""}" data-nav="${this._navOrMore(x, st.entity_id)}" style="--c:${alert ? "#FF6B5E" : x.color || "#90a4ae"}"><ha-icon icon="${x.icon || "mdi:information-outline"}"></ha-icon><div class="t">${tdcEsc(names[st.entity_id] || x.name)} <small>\xB7 ${tdcEsc(text)}</small></div></div>`;
+      if (kind === "calm" && alert) return;
+      if (kind === "alerts" && !alert) return;
+      if (alert) out.unshift(row);
+      else out.push(row);
+    });
+    const u = this._config.updates;
+    if (u && this._visible(u) && kind !== "calm") {
+      const n = Object.keys(h.states).filter((e) => e.startsWith("update.") && h.states[e].state === "on").length;
+      if (n) out.push(`<div class="row" data-nav="${u.navigate || ""}" style="--c:#42A5F5"><ha-icon icon="mdi:package-up"></ha-icon><div class="t">${n === 1 ? "1 Update" : n + " Updates"} <small>\xB7 verf\xFCgbar</small></div></div>`);
+    }
+    return out;
+  }
+  _bathRow() {
+    const b = this._config.bath;
+    if (!b || !b.script) return "";
+    const now = /* @__PURE__ */ new Date(), m = now.getHours() * 60 + now.getMinutes();
+    const from = (b.from ?? 18) * 60, until = Math.round((b.until ?? 21.5) * 60);
+    if (m < from || m > until) return "";
+    const running = this._hass.states[b.script]?.state === "on";
+    const status = b.status ? this._hass.states[b.status]?.state : "";
+    const sub = status && !["unknown", "unavailable"].includes(status) ? `<div class="ts">${tdcEsc(status)}</div>` : "";
+    return `<div class="row act" style="--c:#FF7A45"><ha-icon icon="mdi:shower-head"></ha-icon><div class="t"><div class="tt">Bad aufheizen</div>${sub}</div>${running ? '<div class="m">l\xE4uft</div>' : '<div class="btn" data-act="bath"><ha-icon icon="mdi:play"></ha-icon>Starten</div>'}</div>`;
+  }
+  _byLabel(label) {
+    const ents = this._hass?.entities || {};
+    return Object.keys(ents).filter((e) => (ents[e].labels || []).includes(label)).sort();
+  }
+  _areaName(id) {
+    const h = this._hass, en = h.entities?.[id] || {}, dev = h.devices?.[en.device_id] || {};
+    const area = h.areas?.[en.area_id || dev.area_id];
+    return area?.name || h.states[id]?.attributes.friendly_name || id;
+  }
+  _gnWindows() {
+    const g = this._config.goodnight || {};
+    return g.windows_label ? this._byLabel(g.windows_label).map((e) => ({ entity: e, name: this._areaName(e) })) : g.windows || [];
+  }
+  _gnLights() {
+    const g = this._config.goodnight || {};
+    return g.lights_label ? this._byLabel(g.lights_label) : g.lights || [];
+  }
+  // Night check: open windows and lights on, as action rows. Returns null outside the window.
+  _goodnight() {
+    const g = this._config.goodnight;
+    if (!g) return null;
+    const hr = (/* @__PURE__ */ new Date()).getHours(), from = g.from ?? 21, until = g.until ?? 1;
+    const inWin = from > until ? hr >= from || hr < until : hr >= from && hr < until;
+    if (!inWin) return null;
+    const h = this._hass, rows = [];
+    const open = this._gnWindows().filter((w) => h.states[w.entity]?.state === "on").map((w) => tdcEsc(w.name));
+    if (open.length) rows.push(`<div class="row act" style="--c:#2EC4B6"><ha-icon icon="mdi:window-open-variant"></ha-icon><div class="t"><div class="tt">${open.length === 1 ? "Fenster offen" : open.length + " Fenster offen"}</div><div class="ts">${open.join(", ")}</div></div></div>`);
+    const on = this._gnLights().filter((l) => h.states[l]?.state === "on");
+    if (on.length && g.show_lights !== false) {
+      const names = on.map((l) => h.states[l].attributes.friendly_name || l);
+      rows.push(`<div class="row act" style="--c:#FFB020"><ha-icon icon="mdi:lightbulb-on-outline"></ha-icon><div class="t"><div class="tt">${on.length === 1 ? tdcEsc(names[0]) + " ist an" : on.length + " Lampen an"}</div>${on.length > 1 ? `<div class="ts">${tdcEsc(names.slice(0, 3).join(", "))}${on.length > 3 ? " \u2026" : ""}</div>` : ""}</div><div class="btn" data-act="lights-off"><ha-icon icon="mdi:power"></ha-icon>Aus</div></div>`);
+    }
+    return { rows, open: open.length, lights: on.length };
+  }
+  // view: running - only what is running right now (appliances, robots, media).
+  _renderRunning() {
+    this._applianceRows();
+    const rows = [...this._applianceRun || [], ...this._statusRows("calm")];
+    this.style.display = rows.length ? "" : "none";
+    this._root.innerHTML = rows.length ? `<div class="blk"><div class="bt">${tdcEsc(this._config.title || "L\xE4uft gerade")}</div>${rows.join("")}</div>` : "";
+  }
+  _render() {
+    if (!this._hass || !this._root) return;
+    if (this._config.view === "running") {
+      this._renderRunning();
+      return;
+    }
+    const c = this._config, h = this._hass, now = /* @__PURE__ */ new Date(), hour = now.getHours();
+    const first = c.show_name === false ? "" : (h.user?.name || "").split(" ")[0];
+    const greet = hour < 5 ? "Gute Nacht" : hour < 11 ? "Guten Morgen" : hour < 18 ? "Hallo" : "Guten Abend";
+    const evening = this._evening();
+    let wx = "", wxPill = "";
+    const ws = h.states[c.weather];
+    if (ws) {
+      const night = h.states["sun.sun"]?.state === "below_horizon";
+      let [label, icon] = TDC_COND[ws.state] || [ws.state, "mdi:weather-cloudy"];
+      if (night && ws.state === "sunny") [label, icon] = TDC_COND["clear-night"];
+      if (night && ws.state === "partlycloudy") icon = "mdi:weather-night-partly-cloudy";
+      const fc = evening ? (this._fcList || [])[1] : this._fc;
+      const hl = fc && fc.temperature != null ? `${evening ? "Morgen " : ""}${tdcDeg(fc.temperature)} / ${tdcDeg(fc.templow)}` : "";
+      wxPill = `<div class="wxpill" data-nav="${c.weather_navigate || ""}"><ha-icon icon="${icon}"></ha-icon>${tdcDeg(ws.attributes.temperature)} \xB7 ${label}</div>`;
+      wx = `<div class="wxrow" data-nav="${c.weather_navigate || ""}"><div class="temp">${tdcDeg(ws.attributes.temperature)}</div>
+        <div class="cond"><b><ha-icon icon="${icon}"></ha-icon>${label}</b>${hl ? `<span>${hl}</span>` : ""}</div></div>`;
+    }
+    const acts = [], info = [];
+    const gn = this._goodnight();
+    if (gn) acts.push(...gn.rows);
+    const waste = this._wasteRow();
+    if (waste) (this._wasteAct ? acts : info).push(waste);
+    acts.push(...this._applianceRows());
+    acts.push(...this._hintRows(gn));
+    const bath = this._bathRow();
+    if (bath) acts.push(bath);
+    if (c.hide_running) acts.push(...this._statusRows("alerts"));
+    else acts.push(...c.show_running_appliances ? this._applianceRun || [] : [], ...this._statusRows());
+    const max = c.max_now ?? 4;
+    let nowRows = acts;
+    if (acts.length > max + 1) {
+      nowRows = this._more ? acts.concat(`<div class="row more" data-act="more"><ha-icon icon="mdi:chevron-up"></ha-icon><div class="t">Weniger</div></div>`) : acts.slice(0, max).concat(`<div class="row more" data-act="more"><ha-icon icon="mdi:chevron-down"></ha-icon><div class="t">+ ${acts.length - max} weitere</div></div>`);
+    }
+    const events = this._eventRows();
+    info.unshift(...events);
+    if (evening) {
+      const fc1 = (this._fcList || [])[1];
+      if (fc1 && fc1.templow != null && fc1.templow <= 1) info.push(`<div class="row" style="--c:#90caf9"><ha-icon icon="mdi:snowflake"></ha-icon><div class="t">Morgen fr\xFCh ${tdcDeg(fc1.templow).replace("\xB0", " \xB0C")} <small>\xB7 ${fc1.templow <= 0 ? "Scheiben kratzen" : "kalt"}</small></div></div>`);
+    }
+    const pk = c.packages;
+    if (pk && pk.items) {
+      const on = pk.items.filter((x) => h.states[x.entity]?.state === "on").map((x) => x.name);
+      if (on.length) info.push(`<div class="row" data-nav="${pk.navigate || ""}" style="--c:#bcaaa4"><ha-icon icon="mdi:package-variant-closed"></ha-icon><div class="t">${on.join(", ")} <small>\xB7 kommt heute</small></div></div>`);
+    }
+    if (pk && pk.entity) {
+      const n = parseInt(h.states[pk.entity]?.state, 10);
+      if (n > 0) info.push(`<div class="row" data-nav="${pk.navigate || ""}" style="--c:#bcaaa4"><ha-icon icon="mdi:package-variant-closed"></ha-icon><div class="t">${n === 1 ? "1 Paket" : n + " Pakete"} <small>\xB7 unterwegs</small></div></div>`);
+    }
+    const en = c.energy && (!c.energy.admin_only || h.user?.is_admin) ? c.energy : null;
+    let pvSay = "";
+    if (en) {
+      const late = hour >= 16;
+      const kwh = this._num(late ? en.pv_tomorrow : en.pv_today);
+      const bat = en.battery ? `<div class="m">Akku ${this._num(en.battery, 0)} %</div>` : "";
+      info.push(`<div class="row" data-nav="${en.navigate || ""}" style="--c:#ffd166"><ha-icon icon="mdi:solar-power-variant"></ha-icon><div class="t">PV ${late ? "morgen" : "heute"} <small>\xB7 ca. ${kwh} kWh</small></div>${bat}</div>`);
+    }
+    const say = this._sentence({ gn, pvSay, evening });
+    const infoTitle = evening ? "Demn\xE4chst" : c.title || "Heute";
+    const colorful = c.style === "colorful";
+    this._root.classList.toggle("colorful", colorful);
+    const dateTxt = `${TDC_DAYS[now.getDay()]}, ${now.getDate()}. ${TDC_MONTHS[now.getMonth()]}`;
+    this._root.innerHTML = `
+      <div class="hero">
+        ${colorful ? `<div class="top"><div class="date">${dateTxt}</div>${wxPill}</div>` : `<div class="date">${dateTxt}</div>
+        ${wx}`}
+        <div class="greet">${greet}${first ? ", " + tdcEsc(first) : ""}</div>
+        <div class="say">${tdcEsc(say)}</div>
+      </div>
+      ${nowRows.length ? `<div class="blk"><div class="bt">Jetzt</div>${nowRows.join("")}</div>` : ""}
+      ${info.length ? `<div class="blk"><div class="bt">${infoTitle}</div>${info.join("")}</div>` : ""}`;
+  }
+  // One sentence for the day, fixed priority: warning > appliance done > waste > next event > night check > PV.
+  _sentence({ gn, pvSay, evening }) {
+    const c = this._config, h = this._hass;
+    const wr = c.warning && h.states[c.warning.entity];
+    if (wr && wr.state === "on") {
+      const d = c.warning.detail && h.states[c.warning.detail];
+      const head = d && (d.attributes.warning_1_headline || d.attributes.headline);
+      const m = head && /vor\s+(.+)$/i.exec(head);
+      let warn = "Achtung, Wetterwarnung.";
+      if (m) {
+        const w = m[1].trim().toLowerCase().split(/\s+/);
+        w[w.length - 1] = w[w.length - 1].charAt(0).toUpperCase() + w[w.length - 1].slice(1);
+        warn = `Warnung vor ${w.join(" ")}.`;
+      } else if (head) warn = `Achtung: ${head}.`;
+      const rest = this._sentenceRest({ gn, pvSay, evening });
+      return rest ? `${warn} ${rest}` : warn;
+    }
+    return this._sentenceRest({ gn, pvSay, evening }) || (evening ? "Morgen steht nichts an." : "Heute steht nichts an.");
+  }
+  _sentenceRest({ gn, pvSay, evening }) {
+    const done = this._applianceWarn || [];
+    if (done.length) return done.length === 1 ? `${done[0]} ist fertig und kann ausger\xE4umt werden.` : `${done.join(" und ")} sind fertig.`;
+    if (this._wasteDue) return this._wasteDue;
+    if (gn && gn.open) return gn.open === 1 ? "Ein Fenster ist noch offen." : `${gn.open} Fenster sind noch offen.`;
+    const ev = this._nextEvent(evening);
+    if (ev) return ev;
+    if (gn && !gn.lights) return "Alles zu. Gute Nacht.";
+    if (pvSay) return pvSay;
+    return "";
+  }
+  _nextEvent(evening) {
+    if (!this._events) return "";
+    const now = /* @__PURE__ */ new Date();
+    const t0 = /* @__PURE__ */ new Date();
+    t0.setHours(0, 0, 0, 0);
+    const t1 = new Date(t0);
+    t1.setDate(t1.getDate() + 1);
+    const t2 = new Date(t1);
+    t2.setDate(t2.getDate() + 1);
+    const pick = (a, b) => this._events.find((e) => (e.allDay ? e.start < b && e.end > a : e.start >= a && e.start < b) && e.end > now);
+    const today = evening ? null : pick(t0, t1);
+    if (today) return today.allDay ? `Heute: ${today.title}.` : `Um ${this._hm(today.start)} Uhr: ${today.title}.`;
+    const tom = pick(t1, t2);
+    if (tom) return tom.allDay ? `Morgen: ${tom.title}.` : `Morgen um ${this._hm(tom.start)} Uhr: ${tom.title}.`;
+    return "";
+  }
+  _onClick(e) {
+    if (e.target.closest('[data-act="more"]')) {
+      this._more = !this._more;
+      this._render();
+      return;
+    }
+    if (e.target.closest('[data-act="waste-done"]')) {
+      const id = this._config.waste.done_entity;
+      this._hass.callService(id.split(".")[0], "press", { entity_id: id });
+      this.dispatchEvent(new CustomEvent("haptic", { bubbles: true, composed: true, detail: "success" }));
+      return;
+    }
+    if (e.target.closest('[data-act="lights-off"]')) {
+      const on = this._gnLights().filter((l) => this._hass.states[l]?.state === "on");
+      if (on.length) this._hass.callService("light", "turn_off", { entity_id: on });
+      this.dispatchEvent(new CustomEvent("haptic", { bubbles: true, composed: true, detail: "success" }));
+      return;
+    }
+    if (e.target.closest('[data-act="bath"]')) {
+      this._hass.callService("script", "turn_on", { entity_id: this._config.bath.script });
+      this.dispatchEvent(new CustomEvent("haptic", { bubbles: true, composed: true, detail: "success" }));
+      return;
+    }
+    const el = e.target.closest("[data-nav]");
+    const nav = el && el.dataset.nav;
+    if (!nav) return;
+    if (nav.startsWith("more-info:")) {
+      this.dispatchEvent(new CustomEvent("hass-more-info", { bubbles: true, composed: true, detail: { entityId: nav.slice(10) } }));
+      this.dispatchEvent(new CustomEvent("haptic", { bubbles: true, composed: true, detail: "light" }));
+      return;
+    }
+    const oldURL = location.href;
+    history.pushState(null, "", nav);
+    if (nav.startsWith("#")) window.dispatchEvent(new HashChangeEvent("hashchange", { oldURL, newURL: location.href }));
+    else window.dispatchEvent(new CustomEvent("location-changed", { detail: { replace: false } }));
+    this.dispatchEvent(new CustomEvent("haptic", { bubbles: true, composed: true, detail: "light" }));
+  }
+};
+var CAL_COLORS = Object.keys(TDC_COLORS).map((k) => ({ value: k, label: k }));
+var obj = (v) => v && typeof v === "object" && !Array.isArray(v) ? v : {};
+var PaneTodayCardEditor = class extends PaneEditor {
+  labels() {
+    return {
+      view: "Ansicht",
+      title: "Titel",
+      max_events: "Termine h\xF6chstens",
+      style: "Stil",
+      look: "Look",
+      weather: "Wetter",
+      weather_navigate: "Wetter antippen \xF6ffnet",
+      calendar_navigate: "Kalender antippen \xF6ffnet",
+      entity: "Entit\xE4t",
+      color: "Farbe",
+      name: "Name",
+      short: "Kurzname",
+      icon: "Icon",
+      show_within_days: "Erst zeigen ab (Tage vorher)",
+      done_entity: "Knopf \u201Erausgestellt\u201C",
+      navigate: "Antippen \xF6ffnet",
+      evening_from: "Abends ab (Uhr)",
+      morning_until: "Morgens bis (Uhr)",
+      pv_today: "PV-Prognose heute",
+      pv_tomorrow: "PV-Prognose morgen",
+      battery: "Akku-Ladestand",
+      admin_only: "Nur f\xFCr Admins",
+      state: "Status-Entit\xE4t",
+      run: "L\xE4uft bei Status",
+      done: "Fertig bei Status",
+      finish: "Ende (Zeitpunkt)",
+      remaining: "Restzeit",
+      power: "Leistung",
+      power_above: "L\xE4uft ab (W)",
+      door: "T\xFCr",
+      done_hours: "Fertig zeigen (Stunden)",
+      states: "Zeigen bei Status"
+    };
+  }
+  helpers() {
+    return {
+      view: "Heute: Begr\xFC\xDFung, Wetter und Liste. L\xE4uft gerade: nur Ger\xE4te und Status.",
+      run: "Status-Werte, bei denen das Ger\xE4t als laufend gilt, z. B. running."
+    };
+  }
+  _set(path, value) {
+    const next = { ...this._config };
+    if (path) {
+      const v = PaneEditor.clean(value || {});
+      if (Object.keys(v).length) next[path] = v;
+      else delete next[path];
+    }
+    this.emit(next);
+  }
+  _listSection(key, title, path, { create, titleOf, subtitleOf, icon, schema, addLabel }) {
+    const c = this._config || {};
+    const get = () => (path ? obj(c[path])[key] : c[key]) || [];
+    const put = (list) => {
+      const next = { ...this._config };
+      if (path) next[path] = { ...obj(next[path]), [key]: list };
+      else next[key] = list;
+      this.emit(next);
+    };
+    return {
+      key: `${path || ""}.${key}`,
+      title,
+      list: {
+        items: get,
+        set: put,
+        create,
+        addLabel,
+        title: titleOf,
+        subtitle: subtitleOf,
+        icon: () => icon,
+        schema: () => schema,
+        data: (r) => ({ ...r }),
+        merge: (r, v) => PaneEditor.clean({ ...v })
+      }
+    };
+  }
+  sections() {
+    const c = this._config || {};
+    const running = c.view === "running";
+    const entity = (domain, extra = {}) => ({ entity: { ...domain ? { domain } : {}, ...extra } });
+    const out = [{
+      title: "Ansicht",
+      schema: [
+        { type: "grid", name: "", schema: [
+          { name: "view", selector: { select: { mode: "dropdown", options: [{ value: "today", label: "Heute" }, { value: "running", label: "L\xE4uft gerade" }] } } },
+          { name: "look", selector: { select: { mode: "dropdown", options: [{ value: "theme", label: "Vom Theme" }, { value: "glass", label: "Glass" }, { value: "solid", label: "Solid" }] } } }
+        ] },
+        ...running ? [{ name: "title", selector: { text: {} } }] : [
+          { type: "grid", name: "", schema: [
+            { name: "style", selector: { select: { mode: "dropdown", options: [{ value: "calm", label: "Ruhig" }, { value: "colorful", label: "Farbig" }] } } },
+            { name: "max_events", selector: { number: { min: 0, max: 10, mode: "box" } } }
+          ] }
+        ]
+      ],
+      signature: () => running ? "r" : "t",
+      data: () => ({ ...c, view: running ? "running" : "today", look: c.look || "theme", style: c.style || "calm" }),
+      set: (v) => {
+        const next = { ...this._config, ...v };
+        if (next.view === "today") delete next.view;
+        if (next.look === "theme") delete next.look;
+        if (next.style === "calm") delete next.style;
+        if (next.title === "") delete next.title;
+        this.emit(next);
+      }
+    }];
+    if (!running) {
+      out.push({
+        title: "Wetter",
+        schema: [
+          { name: "weather", selector: entity("weather") },
+          { name: "weather_navigate", selector: { text: {} } }
+        ],
+        data: () => c,
+        set: (v) => this.emit(PaneEditor.clean({ ...this._config, ...v }))
+      });
+      out.push(this._listSection("calendars", "Kalender", null, {
+        create: () => ({ entity: "" }),
+        addLabel: "+ Kalender hinzuf\xFCgen",
+        icon: "mdi:calendar",
+        titleOf: (r) => r.entity || "Neuer Kalender",
+        subtitleOf: (r) => r.color || "",
+        schema: [
+          { name: "entity", required: true, selector: entity("calendar") },
+          { name: "color", selector: { select: { mode: "dropdown", custom_value: true, options: CAL_COLORS } } }
+        ]
+      }));
+      out.push({
+        title: "",
+        schema: [{ name: "calendar_navigate", selector: { text: {} } }],
+        data: () => c,
+        set: (v) => this.emit(PaneEditor.clean({ ...this._config, ...v }))
+      });
+      out.push(this._listSection("entities", "M\xFCll", "waste", {
+        create: () => ({ entity: "" }),
+        addLabel: "+ Tonne hinzuf\xFCgen",
+        icon: "mdi:trash-can-outline",
+        titleOf: (r) => r.name || r.entity || "Neue Tonne",
+        subtitleOf: (r) => r.entity || "",
+        schema: [
+          { name: "entity", required: true, selector: entity("sensor") },
+          { type: "grid", name: "", schema: [{ name: "name", selector: { text: {} } }, { name: "short", selector: { text: {} } }] },
+          { type: "grid", name: "", schema: [{ name: "color", selector: { text: {} } }, { name: "icon", selector: { icon: {} } }] },
+          { name: "show_within_days", selector: { number: { min: 0, max: 30, mode: "box" } } }
+        ]
+      }));
+      out.push({
+        title: "",
+        schema: [
+          { name: "done_entity", selector: entity("input_button") },
+          { name: "navigate", selector: { text: {} } },
+          { type: "grid", name: "", schema: [
+            { name: "evening_from", selector: { number: { min: 0, max: 23, mode: "box" } } },
+            { name: "morning_until", selector: { number: { min: 0, max: 23, mode: "box" } } }
+          ] }
+        ],
+        data: () => obj(c.waste),
+        set: (v) => this._set("waste", { ...obj(this._config.waste), ...v })
+      });
+      out.push({
+        title: "Energie",
+        schema: [
+          { type: "grid", name: "", schema: [
+            { name: "pv_today", selector: entity("sensor") },
+            { name: "pv_tomorrow", selector: entity("sensor") }
+          ] },
+          { name: "battery", selector: entity("sensor") },
+          { name: "admin_only", selector: { boolean: {} } }
+        ],
+        data: () => obj(c.energy),
+        set: (v) => this._set("energy", { ...v, admin_only: v.admin_only || void 0 })
+      });
+    }
+    out.push(this._listSection("appliances", "Ger\xE4te", null, {
+      create: () => ({ name: "Neues Ger\xE4t" }),
+      addLabel: "+ Ger\xE4t hinzuf\xFCgen",
+      icon: "mdi:washing-machine",
+      titleOf: (r) => r.name,
+      subtitleOf: (r) => r.state || "",
+      schema: [
+        { type: "grid", name: "", schema: [{ name: "name", required: true, selector: { text: {} } }, { name: "icon", selector: { icon: {} } }] },
+        { name: "state", selector: entity() },
+        { type: "grid", name: "", schema: [{ name: "run", selector: { text: { multiple: true } } }, { name: "done", selector: { text: { multiple: true } } }] },
+        { type: "grid", name: "", schema: [{ name: "finish", selector: entity("sensor") }, { name: "remaining", selector: entity("sensor") }] },
+        { type: "grid", name: "", schema: [{ name: "power", selector: entity("sensor") }, { name: "power_above", selector: { number: { min: 0, mode: "box" } } }] },
+        { type: "grid", name: "", schema: [{ name: "door", selector: entity("binary_sensor") }, { name: "done_hours", selector: { number: { min: 0, max: 24, mode: "box" } } }] },
+        { type: "grid", name: "", schema: [{ name: "color", selector: { text: {} } }, { name: "navigate", selector: { text: {} } }] }
+      ]
+    }));
+    out.push(this._listSection("status", "Status", null, {
+      create: () => ({ entity: "" }),
+      addLabel: "+ Status hinzuf\xFCgen",
+      icon: "mdi:robot-vacuum",
+      titleOf: (r) => r.name || r.entity || "Neuer Status",
+      subtitleOf: (r) => r.entity || "",
+      schema: [
+        { name: "entity", required: true, selector: entity() },
+        { type: "grid", name: "", schema: [{ name: "name", selector: { text: {} } }, { name: "icon", selector: { icon: {} } }] },
+        { name: "states", selector: { text: { multiple: true } } },
+        { type: "grid", name: "", schema: [{ name: "color", selector: { text: {} } }, { name: "navigate", selector: { text: {} } }] }
+      ]
+    }));
+    out[out.length - 1].hint = "Gute Nacht, Bad, Pakete, Hinweise, Warnung und Updates bisher nur im Code-Editor.";
+    return out;
+  }
+};
+
 // src/index.js
 var VERSION = CARD_VERSION;
 var SUFFIX = "";
@@ -1470,6 +2646,22 @@ var CARDS = [
     description: "Kacheln f\xFCr Licht, Schalter, Werte und Zahlen \u2013 Schalter, Balken, Ring oder Zahl, alles im visuellen Editor.",
     // Older configs keep working when the old card is not installed.
     aliases: ["liquid-glass-tile-card-v2"]
+  },
+  {
+    cls: PaneTodayCard,
+    editor: PaneTodayCardEditor,
+    tag: "pane-today-card",
+    name: "Pane Today Card",
+    description: "Begr\xFC\xDFung, Wetter und eine ruhige Liste f\xFCr heute \u2013 oder was gerade l\xE4uft.",
+    aliases: ["today-glass-card"]
+  },
+  {
+    cls: PaneRoomsCard,
+    editor: PaneRoomsCardEditor,
+    tag: "pane-rooms-card",
+    name: "Pane Rooms Card",
+    description: "Alle R\xE4ume auf einen Blick: Temperatur, ein Hinweis je Raum und alle Lampen aus.",
+    aliases: ["home-glass-card"]
   }
 ];
 var define = (tag, cls) => {

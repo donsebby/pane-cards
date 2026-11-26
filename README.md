@@ -74,6 +74,9 @@ installed).
 
 ## Changelog
 
+### 0.2.0
+- New: Pane Today Card (successor of today-glass-card) and Pane Rooms Card (successor of home-glass-card), both with glass and solid look and a visual editor.
+
 ### 0.1.1
 - No panel of its own inside a pop-up (`frame` now defaults to automatic).
 

@@ -25,6 +25,10 @@ export class PaneCard extends HTMLElement {
   }
 
   validateConfig() {}
+
+  // null: own panel, none inside a pop-up. Cards that are sections of the
+  // page rather than panels (today, rooms) return false.
+  defaultFrame() { return null; }
   build() {}
   update() {}
 
@@ -125,7 +129,8 @@ export class PaneCard extends HTMLElement {
   _applyCardClasses() {
     const c = this._config;
     this.cardEl.classList.toggle('solid', this.isSolid());
-    this.cardEl.classList.toggle('frameless', c.frame === false || (c.frame == null && !!this._inPopup));
+    const frame = c.frame ?? this.defaultFrame();
+    this.cardEl.classList.toggle('frameless', frame === false || (frame == null && !!this._inPopup));
     this.cardEl.classList.toggle('calm', !this.glowOn());
   }
 

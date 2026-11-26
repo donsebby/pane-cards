@@ -1,4 +1,6 @@
 import { PaneTileCard, PaneTileCardEditor } from './cards/tile.js';
+import { PaneRoomsCard, PaneRoomsCardEditor } from './cards/rooms.js';
+import { PaneTodayCard, PaneTodayCardEditor } from './cards/today.js';
 
 // __PANE_VERSION__ and __PANE_SUFFIX__ are set by build.mjs: the stable
 // build registers `pane-tile-card`, the Lab build `pane-tile-card-dev`, so
@@ -17,6 +19,18 @@ const CARDS = [
     description: 'Kacheln für Licht, Schalter, Werte und Zahlen – Schalter, Balken, Ring oder Zahl, alles im visuellen Editor.',
     // Older configs keep working when the old card is not installed.
     aliases: ['liquid-glass-tile-card-v2'],
+  },
+  {
+    cls: PaneTodayCard, editor: PaneTodayCardEditor, tag: 'pane-today-card',
+    name: 'Pane Today Card',
+    description: 'Begrüßung, Wetter und eine ruhige Liste für heute – oder was gerade läuft.',
+    aliases: ['today-glass-card'],
+  },
+  {
+    cls: PaneRoomsCard, editor: PaneRoomsCardEditor, tag: 'pane-rooms-card',
+    name: 'Pane Rooms Card',
+    description: 'Alle Räume auf einen Blick: Temperatur, ein Hinweis je Raum und alle Lampen aus.',
+    aliases: ['home-glass-card'],
   },
 ];
 
