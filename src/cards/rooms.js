@@ -16,6 +16,7 @@ import { PaneEditor } from '../core/editor.js';
 //     climate: climate.living_room
 //     temperature: sensor.xyz      # optional, else the climate's current_temperature
 //     windows: [binary_sensor.a]
+//     heating_status: sensor.xyz   # optional text like "Manuell 22,0 °C bis 18:00" -> "Hand 22° bis 18:00"
 //     media: [{ entity: media_player.tv, name: TV }]
 //     navigate: '#climate-popup'   # optional, else more-info of climate/temperature
 //     color: '#FFB020'             # optional room colour (tiles), else one from the palette
@@ -44,7 +45,7 @@ const HGC_INK2 = 'var(--text-2, var(--secondary-text-color, rgba(255,255,255,.65
 // Room colours for `tiles: true`, used in order unless a room sets `color`.
 const HGC_COLORS = ['#FFB020', '#8C7BFF', '#4F8CFF', '#FF5FA2', '#34C759', '#C86BFF', '#2EC4B6', '#FF7A45'];
 // Hint kinds -> colour of their little pill.
-const HGC_HINT = { window: '#2EC4B6', heat: '#FF7A45', media: '#A66CFF', light: '#FFB020' };
+const HGC_HINT = { window: '#2EC4B6', heat: '#FF7A45', manual: '#FF7A45', media: '#A66CFF', light: '#FFB020' };
 const hgcEsc = (s) => String(s ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 const hgcDeg = (v) => (Number.isFinite(v) ? v.toFixed(1).replace('.', ',') + '°' : '–');
 
@@ -177,7 +178,7 @@ export class PaneRoomsCard extends PaneCard {
     this._index();
     const ids = [];
     this._config.rooms.forEach((r) => {
-      ids.push(r.climate, r.temperature, ...(r.windows || []), ...(r.media || []).map((m) => m.entity || m));
+      ids.push(r.climate, r.temperature, r.heating_status, ...(r.windows || []), ...(r.media || []).map((m) => m.entity || m));
       if (r.area) ids.push(...(this._lightsByArea[r.area] || []));
     });
     ids.push(...this._lamps);
@@ -188,6 +189,15 @@ export class PaneRoomsCard extends PaneCard {
     const h = this._hass, on = (id) => h.states[id]?.state === 'on';
     const open = (r.windows || []).filter(on);
     if (open.length) return ['Fenster offen', '#FFC145', 'window'];
+    // Heating status text of an own heating control (e.g. "Manuell 22,0 °C bis 18:00").
+    const hs = r.heating_status && h.states[r.heating_status];
+    const text = hs ? String(hs.state).trim() : '';
+    const man = /^Manuell\s+([\d,.]+)\s*°C(?:\s+bis\s+(\d{1,2}:\d{2}))?/i.exec(text);
+    if (man) {
+      const deg = man[1].replace('.', ',').replace(/,0+$/, '');
+      return [`Hand ${deg}°${man[2] ? ` bis ${man[2]}` : ''}`, '#FF9E6B', 'manual'];
+    }
+    if (/^Fenster/i.test(text) && !(r.windows || []).length) return ['Fenster offen', '#FFC145', 'window'];
     const cl = r.climate && h.states[r.climate];
     // Heating only counts while the room is still clearly below its target:
     // thermostats keep reporting "heating" around the target, which is just noise.
@@ -272,7 +282,7 @@ export class PaneRoomsCardEditor extends PaneEditor {
     return {
       title: 'Titel', tiles: 'Farbige Kacheln', lights_label: 'Label der Lampen', look: 'Look',
       name: 'Name', area: 'Bereich', climate: 'Thermostat', temperature: 'Temperatur-Sensor', windows: 'Fenster',
-      media: 'Medien', navigate: 'Antippen öffnet', color: 'Farbe',
+      media: 'Medien', navigate: 'Antippen öffnet', color: 'Farbe', heating_status: 'Heizungs-Status',
     };
   }
 
@@ -281,6 +291,7 @@ export class PaneRoomsCardEditor extends PaneEditor {
       lights_label: 'Lampen mit diesem Label zählen für „N Lampen an“ und „Alle aus“.',
       area: 'Eingeschaltete Lampen in diesem Bereich zeigen „Licht an“.',
       temperature: 'Leer = aktuelle Temperatur des Thermostats.',
+      heating_status: 'Text wie ‚Manuell 22,0 °C bis 18:00‘ zeigt ‚Hand 22° bis 18:00‘.',
       navigate: 'Zum Beispiel #raum-wohnzimmer für ein Pop-up. Leer = Details von Thermostat oder Sensor.',
     };
   }
@@ -329,6 +340,7 @@ export class PaneRoomsCardEditor extends PaneEditor {
             ] },
             { name: 'climate', selector: { entity: { domain: 'climate' } } },
             { name: 'temperature', selector: { entity: { domain: 'sensor', device_class: 'temperature' } } },
+            { name: 'heating_status', selector: { entity: { domain: 'sensor' } } },
             { name: 'windows', selector: { entity: { domain: 'binary_sensor', multiple: true } } },
             { name: 'media', selector: { entity: { domain: 'media_player', multiple: true } } },
             { name: 'navigate', selector: { text: {} } },

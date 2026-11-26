@@ -1463,7 +1463,7 @@ var PaneTileCardEditor = class extends PaneEditor {
 var HGC_INK = "var(--text-1, var(--primary-text-color, #fff))";
 var HGC_INK2 = "var(--text-2, var(--secondary-text-color, rgba(255,255,255,.65)))";
 var HGC_COLORS = ["#FFB020", "#8C7BFF", "#4F8CFF", "#FF5FA2", "#34C759", "#C86BFF", "#2EC4B6", "#FF7A45"];
-var HGC_HINT = { window: "#2EC4B6", heat: "#FF7A45", media: "#A66CFF", light: "#FFB020" };
+var HGC_HINT = { window: "#2EC4B6", heat: "#FF7A45", manual: "#FF7A45", media: "#A66CFF", light: "#FFB020" };
 var hgcEsc = (s) => String(s ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]);
 var hgcDeg = (v) => Number.isFinite(v) ? v.toFixed(1).replace(".", ",") + "\xB0" : "\u2013";
 var GLASS_BG = (tint, a, b) => `linear-gradient(160deg, color-mix(in srgb, ${tint} ${a}, color-mix(in srgb, #fff 16%, transparent)), color-mix(in srgb, ${tint} ${b}, color-mix(in srgb, #fff 4%, transparent)))`;
@@ -1591,7 +1591,7 @@ var PaneRoomsCard = class _PaneRoomsCard extends PaneCard {
     this._index();
     const ids = [];
     this._config.rooms.forEach((r) => {
-      ids.push(r.climate, r.temperature, ...r.windows || [], ...(r.media || []).map((m) => m.entity || m));
+      ids.push(r.climate, r.temperature, r.heating_status, ...r.windows || [], ...(r.media || []).map((m) => m.entity || m));
       if (r.area) ids.push(...this._lightsByArea[r.area] || []);
     });
     ids.push(...this._lamps);
@@ -1601,6 +1601,14 @@ var PaneRoomsCard = class _PaneRoomsCard extends PaneCard {
     const h = this._hass, on = (id) => h.states[id]?.state === "on";
     const open = (r.windows || []).filter(on);
     if (open.length) return ["Fenster offen", "#FFC145", "window"];
+    const hs = r.heating_status && h.states[r.heating_status];
+    const text = hs ? String(hs.state).trim() : "";
+    const man = /^Manuell\s+([\d,.]+)\s*°C(?:\s+bis\s+(\d{1,2}:\d{2}))?/i.exec(text);
+    if (man) {
+      const deg = man[1].replace(".", ",").replace(/,0+$/, "");
+      return [`Hand ${deg}\xB0${man[2] ? ` bis ${man[2]}` : ""}`, "#FF9E6B", "manual"];
+    }
+    if (/^Fenster/i.test(text) && !(r.windows || []).length) return ["Fenster offen", "#FFC145", "window"];
     const cl = r.climate && h.states[r.climate];
     if (cl && cl.attributes.hvac_action === "heating") {
       const t = parseFloat(cl.attributes.temperature), cur = this._temp(r);
@@ -1688,7 +1696,8 @@ var PaneRoomsCardEditor = class extends PaneEditor {
       windows: "Fenster",
       media: "Medien",
       navigate: "Antippen \xF6ffnet",
-      color: "Farbe"
+      color: "Farbe",
+      heating_status: "Heizungs-Status"
     };
   }
   helpers() {
@@ -1696,6 +1705,7 @@ var PaneRoomsCardEditor = class extends PaneEditor {
       lights_label: "Lampen mit diesem Label z\xE4hlen f\xFCr \u201EN Lampen an\u201C und \u201EAlle aus\u201C.",
       area: "Eingeschaltete Lampen in diesem Bereich zeigen \u201ELicht an\u201C.",
       temperature: "Leer = aktuelle Temperatur des Thermostats.",
+      heating_status: "Text wie \u201AManuell 22,0 \xB0C bis 18:00\u2018 zeigt \u201AHand 22\xB0 bis 18:00\u2018.",
       navigate: "Zum Beispiel #raum-wohnzimmer f\xFCr ein Pop-up. Leer = Details von Thermostat oder Sensor."
     };
   }
@@ -1743,6 +1753,7 @@ var PaneRoomsCardEditor = class extends PaneEditor {
             ] },
             { name: "climate", selector: { entity: { domain: "climate" } } },
             { name: "temperature", selector: { entity: { domain: "sensor", device_class: "temperature" } } },
+            { name: "heating_status", selector: { entity: { domain: "sensor" } } },
             { name: "windows", selector: { entity: { domain: "binary_sensor", multiple: true } } },
             { name: "media", selector: { entity: { domain: "media_player", multiple: true } } },
             { name: "navigate", selector: { text: {} } }
@@ -1855,6 +1866,8 @@ var TDC_STYLE = `
   .chip i { width:10px; height:10px; border-radius:50%; background: var(--b); flex:none; }
   .more { color:${TDC_INK2}; font-size:14px; min-height:40px; }
   .more ha-icon { --mdc-icon-size:18px; }
+  .tm { flex:none; width:44px; font-variant-numeric: tabular-nums; color:${TDC_INK2}; font-size:15px; }
+  .row.tl > ha-icon { --mdc-icon-size:18px; width:20px; }
   .sep { height:1px; margin:2px 12px; background: color-mix(in srgb, ${TDC_INK} 8%, transparent); }
   /* style: colorful \u2013 coloured icon squares, compact weather pill, big greeting */
   .colorful .row > ha-icon:first-child { --mdc-icon-size:18px; width:34px; height:34px; box-sizing:border-box; padding:0; border-radius:10px;
@@ -1877,6 +1890,16 @@ var TDC_STYLE = `
   .colorful .greet { font-size:26px; font-weight:700; margin-top:10px; letter-spacing:-0.01em; }
   .colorful .say { font-size:17px; font-weight:500; margin-top:6px; line-height:1.35; color:${TDC_INK2}; }
 `;
+var TDC_WET = ["rainy", "pouring", "lightning-rainy", "snowy", "snowy-rainy", "hail"];
+var TDC_SNOW = ["snowy", "snowy-rainy"];
+function tdcOutfit(fc) {
+  const hi = Number(fc?.temperature);
+  if (!fc || !Number.isFinite(hi)) return null;
+  let item = hi <= 3 ? "Winterjacke + M\xFCtze" : hi <= 10 ? "warme Jacke" : hi <= 16 ? "Jacke" : hi <= 21 ? "Pulli" : "T-Shirt";
+  const wet = Number(fc.precipitation) >= 1 || TDC_WET.includes(fc.condition);
+  if (wet) item += " \xB7 Schirm";
+  return { item, coat: hi <= 16 };
+}
 var tdcDeg = (v) => v == null || !Number.isFinite(Number(v)) ? "" : String(Math.round(Number(v))).replace("-", "\u2212") + "\xB0";
 var PaneTodayCard = class _PaneTodayCard extends PaneCard {
   static get styles() {
@@ -1996,19 +2019,28 @@ var PaneTodayCard = class _PaneTodayCard extends PaneCard {
     const id = this._config.weather;
     if (!id || !this._hass?.states[id]) return;
     this._fcAt = Date.now();
+    const get = (type) => this._hass.callWS({
+      type: "call_service",
+      domain: "weather",
+      service: "get_forecasts",
+      service_data: { type },
+      target: { entity_id: id },
+      return_response: true
+    });
     try {
-      const res = await this._hass.callWS({
-        type: "call_service",
-        domain: "weather",
-        service: "get_forecasts",
-        service_data: { type: "daily" },
-        target: { entity_id: id },
-        return_response: true
-      });
+      const res = await get("daily");
       this._fcList = res?.response?.[id]?.forecast || [];
       this._fc = this._fcList[0] || null;
       this._render();
     } catch (e) {
+    }
+    if (this._config.timeline) {
+      try {
+        const res = await get("hourly");
+        this._fcHourly = res?.response?.[id]?.forecast || [];
+        this._render();
+      } catch (e) {
+      }
     }
   }
   _num(id, d = 1) {
@@ -2103,6 +2135,51 @@ var PaneTodayCard = class _PaneTodayCard extends PaneCard {
     if (!rows.length) return [];
     if (list.length > c.max_events) rows.push(`<div class="row" data-nav="${c.calendar_navigate || ""}"><span class="dot" style="--c:transparent"></span><div class="t"><small>+ ${list.length - c.max_events} weitere</small></div></div>`);
     return rows;
+  }
+  // Timeline (timeline: true): today's events that are not over, sunset and
+  // the start of rain as rows with their time; all-day first, then by time.
+  _timelineRows() {
+    const c = this._config, h = this._hass, now = /* @__PURE__ */ new Date();
+    const tom0 = /* @__PURE__ */ new Date();
+    tom0.setHours(0, 0, 0, 0);
+    tom0.setDate(tom0.getDate() + 1);
+    const items = [];
+    let todayEvents = 0;
+    if (c.calendars && this._events === null) return [`<div class="row"><ha-icon icon="mdi:calendar-blank-outline"></ha-icon><div class="t"><small>Termine laden \u2026</small></div></div>`];
+    (this._events || []).filter((e) => e.start < tom0 && e.end > now).forEach((e) => {
+      todayEvents += 1;
+      const time = e.allDay ? "" : e.start <= now ? "jetzt" : this._hm(e.start);
+      items.push({ allDay: e.allDay, at: e.start, html: `<div class="row tl" data-nav="${c.calendar_navigate || ""}" style="--c:${e.color}"><span class="tm">${time}</span><span class="dot"></span><div class="t">${tdcEsc(e.title)}</div></div>` });
+    });
+    const sideRow = (at, icon, color, text) => ({ allDay: false, at, html: `<div class="row tl" data-nav="${c.weather_navigate || ""}" style="--c:${color}"><span class="tm">${this._hm(at)}</span><ha-icon icon="${icon}"></ha-icon><div class="t">${text}</div></div>` });
+    const set = new Date(h.states["sun.sun"]?.attributes?.next_setting);
+    if (!isNaN(set) && set > now && set < tom0) items.push(sideRow(set, "mdi:weather-sunset-down", "#FFB74D", "Sonnenuntergang"));
+    const ws = h.states[c.weather];
+    if (!(ws && TDC_WET.includes(ws.state))) {
+      const wet = (f2) => Number(f2.precipitation) >= 0.3 || TDC_WET.includes(f2.condition);
+      const f = (this._fcHourly || []).find((x) => {
+        const t = new Date(x.datetime);
+        return t > now && t < tom0 && wet(x);
+      });
+      if (f) {
+        const snow = TDC_SNOW.includes(f.condition);
+        items.push(sideRow(new Date(f.datetime), snow ? "mdi:weather-snowy" : "mdi:weather-rainy", snow ? "#90CAF9" : "#64B5F6", snow ? "Schnee ab" : "Regen ab"));
+      }
+    }
+    items.sort((a, b) => a.allDay === b.allDay ? a.at - b.at : a.allDay ? -1 : 1);
+    const max = c.max_timeline ?? 6;
+    const rows = items.slice(0, max).map((x) => x.html);
+    if (items.length > max) rows.push(`<div class="row tl"><span class="tm"></span><span class="dot" style="--c:transparent"></span><div class="t"><small>+ ${items.length - max} weitere</small></div></div>`);
+    if (!todayEvents) rows.push(...this._eventRows());
+    return rows;
+  }
+  // outfit: true - between 5 and 9 o'clock what to wear, from today's daily forecast.
+  _outfitRow(hour) {
+    if (!this._config.outfit || hour < 5 || hour >= 9) return "";
+    const o = tdcOutfit(this._fc);
+    if (!o) return "";
+    const lo = this._fc.templow != null ? `${tdcDeg(this._fc.templow)} bis ` : "bis ";
+    return `<div class="row" data-nav="${this._config.weather_navigate || ""}" style="--c:#4FC3F7"><ha-icon icon="${o.coat ? "mdi:coat-rack" : "mdi:tshirt-crew"}"></ha-icon><div class="t">Anziehen: ${tdcEsc(o.item)} <small>\xB7 ${lo}${tdcDeg(this._fc.temperature)}</small></div></div>`;
   }
   _evening() {
     return (/* @__PURE__ */ new Date()).getHours() >= (this._config.evening_from ?? 18);
@@ -2234,13 +2311,14 @@ var PaneTodayCard = class _PaneTodayCard extends PaneCard {
     const g = this._config.goodnight || {};
     return g.lights_label ? this._byLabel(g.lights_label) : g.lights || [];
   }
-  // Night check: open windows and lights on, as action rows. Returns null outside the window.
-  _goodnight() {
-    const g = this._config.goodnight;
+  // Night check: open windows and lights on, as action rows. Returns null outside
+  // the window; force (view: night) skips the window.
+  _goodnight(force = false) {
+    const g = this._config.goodnight || (force ? {} : null);
     if (!g) return null;
     const hr = (/* @__PURE__ */ new Date()).getHours(), from = g.from ?? 21, until = g.until ?? 1;
     const inWin = from > until ? hr >= from || hr < until : hr >= from && hr < until;
-    if (!inWin) return null;
+    if (!inWin && !force) return null;
     const h = this._hass, rows = [];
     const open = this._gnWindows().filter((w) => h.states[w.entity]?.state === "on").map((w) => tdcEsc(w.name));
     if (open.length) rows.push(`<div class="row act" style="--c:#2EC4B6"><ha-icon icon="mdi:window-open-variant"></ha-icon><div class="t"><div class="tt">${open.length === 1 ? "Fenster offen" : open.length + " Fenster offen"}</div><div class="ts">${open.join(", ")}</div></div></div>`);
@@ -2258,10 +2336,25 @@ var PaneTodayCard = class _PaneTodayCard extends PaneCard {
     this.style.display = rows.length ? "" : "none";
     this._root.innerHTML = rows.length ? `<div class="blk"><div class="bt">${tdcEsc(this._config.title || "L\xE4uft gerade")}</div>${rows.join("")}</div>` : "";
   }
+  // view: night - the house before bed: open windows, lights on, waste. Never hidden.
+  _renderNight() {
+    const gn = this._goodnight(true);
+    const rows = [...gn.rows];
+    if (!rows.length) rows.push('<div class="row" style="--c:#4CD08A"><ha-icon icon="mdi:check-circle"></ha-icon><div class="t">Alles zu <small>\xB7 Fenster zu, Lampen aus</small></div></div>');
+    const waste = this._wasteRow();
+    if (waste) rows.push(waste);
+    this.style.display = "";
+    this._root.classList.toggle("colorful", this._config.style === "colorful");
+    this._root.innerHTML = `<div class="blk"><div class="bt">${tdcEsc(this._config.title || "Haus f\xFCr die Nacht")}</div>${rows.join("")}</div>`;
+  }
   _render() {
     if (!this._hass || !this._root) return;
     if (this._config.view === "running") {
       this._renderRunning();
+      return;
+    }
+    if (this._config.view === "night") {
+      this._renderNight();
       return;
     }
     const c = this._config, h = this._hass, now = /* @__PURE__ */ new Date(), hour = now.getHours();
@@ -2297,8 +2390,10 @@ var PaneTodayCard = class _PaneTodayCard extends PaneCard {
     if (acts.length > max + 1) {
       nowRows = this._more ? acts.concat(`<div class="row more" data-act="more"><ha-icon icon="mdi:chevron-up"></ha-icon><div class="t">Weniger</div></div>`) : acts.slice(0, max).concat(`<div class="row more" data-act="more"><ha-icon icon="mdi:chevron-down"></ha-icon><div class="t">+ ${acts.length - max} weitere</div></div>`);
     }
-    const events = this._eventRows();
-    info.unshift(...events);
+    if (c.timeline && !evening) info.push(...this._timelineRows());
+    else info.unshift(...this._eventRows());
+    const outfit = this._outfitRow(hour);
+    if (outfit) info.unshift(outfit);
     if (evening) {
       const fc1 = (this._fcList || [])[1];
       if (fc1 && fc1.templow != null && fc1.templow <= 1) info.push(`<div class="row" style="--c:#90caf9"><ha-icon icon="mdi:snowflake"></ha-icon><div class="t">Morgen fr\xFCh ${tdcDeg(fc1.templow).replace("\xB0", " \xB0C")} <small>\xB7 ${fc1.templow <= 0 ? "Scheiben kratzen" : "kalt"}</small></div></div>`);
@@ -2455,12 +2550,24 @@ var PaneTodayCardEditor = class extends PaneEditor {
       power_above: "L\xE4uft ab (W)",
       door: "T\xFCr",
       done_hours: "Fertig zeigen (Stunden)",
-      states: "Zeigen bei Status"
+      states: "Zeigen bei Status",
+      timeline: "Zeitleiste",
+      max_timeline: "Zeitleiste h\xF6chstens",
+      max_now: "\u201EJetzt\u201C h\xF6chstens",
+      outfit: "Anziehtipp morgens",
+      from: "Ab (Uhr)",
+      until: "Bis (Uhr)",
+      windows_label: "Label der Fenster",
+      lights_label: "Label der Lampen",
+      show_lights: "Lampen zeigen"
     };
   }
   helpers() {
     return {
-      view: "Heute: Begr\xFC\xDFung, Wetter und Liste. L\xE4uft gerade: nur Ger\xE4te und Status.",
+      view: "Heute: Begr\xFC\xDFung, Wetter und Liste. L\xE4uft gerade: nur Ger\xE4te und Status. Haus f\xFCr die Nacht: offene Fenster, Lampen, M\xFCll.",
+      timeline: "Heute mit Uhrzeit: Termine, Sonnenuntergang und Regenbeginn.",
+      outfit: "Zwischen 5 und 9 Uhr ein Tipp aus der Tagesvorhersage.",
+      from: "Nur Ansicht Heute: von wann bis wann gepr\xFCft wird (Standard 21 bis 1 Uhr).",
       run: "Status-Werte, bei denen das Ger\xE4t als laufend gilt, z. B. running."
     };
   }
@@ -2501,60 +2608,59 @@ var PaneTodayCardEditor = class extends PaneEditor {
   }
   sections() {
     const c = this._config || {};
-    const running = c.view === "running";
+    const running = c.view === "running", night = c.view === "night", today = !running && !night;
     const entity = (domain, extra = {}) => ({ entity: { ...domain ? { domain } : {}, ...extra } });
     const out = [{
       title: "Ansicht",
       schema: [
         { type: "grid", name: "", schema: [
-          { name: "view", selector: { select: { mode: "dropdown", options: [{ value: "today", label: "Heute" }, { value: "running", label: "L\xE4uft gerade" }] } } },
+          { name: "view", selector: { select: { mode: "dropdown", options: [{ value: "today", label: "Heute" }, { value: "running", label: "L\xE4uft gerade" }, { value: "night", label: "Haus f\xFCr die Nacht" }] } } },
           { name: "look", selector: { select: { mode: "dropdown", options: [{ value: "theme", label: "Vom Theme" }, { value: "glass", label: "Glass" }, { value: "solid", label: "Solid" }] } } }
         ] },
-        ...running ? [{ name: "title", selector: { text: {} } }] : [
+        ...!today ? [{ name: "title", selector: { text: {} } }] : [
           { type: "grid", name: "", schema: [
             { name: "style", selector: { select: { mode: "dropdown", options: [{ value: "calm", label: "Ruhig" }, { value: "colorful", label: "Farbig" }] } } },
             { name: "max_events", selector: { number: { min: 0, max: 10, mode: "box" } } }
+          ] },
+          { name: "timeline", selector: { boolean: {} } },
+          { type: "grid", name: "", schema: [
+            { name: "max_timeline", selector: { number: { min: 1, max: 20, mode: "box" } } },
+            { name: "max_now", selector: { number: { min: 1, max: 20, mode: "box" } } }
           ] }
         ]
       ],
-      signature: () => running ? "r" : "t",
-      data: () => ({ ...c, view: running ? "running" : "today", look: c.look || "theme", style: c.style || "calm" }),
+      signature: () => running ? "r" : night ? "n" : "t",
+      data: () => ({ ...c, view: c.view || "today", look: c.look || "theme", style: c.style || "calm", timeline: !!c.timeline }),
       set: (v) => {
         const next = { ...this._config, ...v };
         if (next.view === "today") delete next.view;
         if (next.look === "theme") delete next.look;
         if (next.style === "calm") delete next.style;
         if (next.title === "") delete next.title;
+        if (!next.timeline) delete next.timeline;
+        ["max_timeline", "max_now"].forEach((k) => {
+          if (next[k] === "" || next[k] == null) delete next[k];
+        });
         this.emit(next);
       }
     }];
-    if (!running) {
-      out.push({
-        title: "Wetter",
-        schema: [
-          { name: "weather", selector: entity("weather") },
-          { name: "weather_navigate", selector: { text: {} } }
-        ],
-        data: () => c,
-        set: (v) => this.emit(PaneEditor.clean({ ...this._config, ...v }))
-      });
-      out.push(this._listSection("calendars", "Kalender", null, {
-        create: () => ({ entity: "" }),
-        addLabel: "+ Kalender hinzuf\xFCgen",
-        icon: "mdi:calendar",
-        titleOf: (r) => r.entity || "Neuer Kalender",
-        subtitleOf: (r) => r.color || "",
-        schema: [
-          { name: "entity", required: true, selector: entity("calendar") },
-          { name: "color", selector: { select: { mode: "dropdown", custom_value: true, options: CAL_COLORS } } }
-        ]
-      }));
-      out.push({
-        title: "",
-        schema: [{ name: "calendar_navigate", selector: { text: {} } }],
-        data: () => c,
-        set: (v) => this.emit(PaneEditor.clean({ ...this._config, ...v }))
-      });
+    const goodnight = {
+      title: "Gute Nacht",
+      schema: [
+        { type: "grid", name: "", schema: [
+          { name: "from", selector: { number: { min: 0, max: 23, mode: "box" } } },
+          { name: "until", selector: { number: { min: 0, max: 23, mode: "box" } } }
+        ] },
+        { type: "grid", name: "", schema: [
+          { name: "windows_label", selector: { label: {} } },
+          { name: "lights_label", selector: { label: {} } }
+        ] },
+        { name: "show_lights", selector: { boolean: {} } }
+      ],
+      data: () => ({ ...obj(c.goodnight), show_lights: obj(c.goodnight).show_lights !== false }),
+      set: (v) => this._set("goodnight", { ...v, show_lights: v.show_lights === false ? false : void 0 })
+    };
+    const wasteSections = () => {
       out.push(this._listSection("entities", "M\xFCll", "waste", {
         create: () => ({ entity: "" }),
         addLabel: "+ Tonne hinzuf\xFCgen",
@@ -2581,6 +2687,44 @@ var PaneTodayCardEditor = class extends PaneEditor {
         data: () => obj(c.waste),
         set: (v) => this._set("waste", { ...obj(this._config.waste), ...v })
       });
+    };
+    if (night) {
+      out.push(goodnight);
+      wasteSections();
+    }
+    if (today) {
+      out.push({
+        title: "Wetter",
+        schema: [
+          { name: "weather", selector: entity("weather") },
+          { name: "weather_navigate", selector: { text: {} } },
+          { name: "outfit", selector: { boolean: {} } }
+        ],
+        data: () => ({ ...c, outfit: !!c.outfit }),
+        set: (v) => {
+          const next = PaneEditor.clean({ ...this._config, ...v });
+          if (!next.outfit) delete next.outfit;
+          this.emit(next);
+        }
+      });
+      out.push(this._listSection("calendars", "Kalender", null, {
+        create: () => ({ entity: "" }),
+        addLabel: "+ Kalender hinzuf\xFCgen",
+        icon: "mdi:calendar",
+        titleOf: (r) => r.entity || "Neuer Kalender",
+        subtitleOf: (r) => r.color || "",
+        schema: [
+          { name: "entity", required: true, selector: entity("calendar") },
+          { name: "color", selector: { select: { mode: "dropdown", custom_value: true, options: CAL_COLORS } } }
+        ]
+      }));
+      out.push({
+        title: "",
+        schema: [{ name: "calendar_navigate", selector: { text: {} } }],
+        data: () => c,
+        set: (v) => this.emit(PaneEditor.clean({ ...this._config, ...v }))
+      });
+      wasteSections();
       out.push({
         title: "Energie",
         schema: [
@@ -2594,7 +2738,9 @@ var PaneTodayCardEditor = class extends PaneEditor {
         data: () => obj(c.energy),
         set: (v) => this._set("energy", { ...v, admin_only: v.admin_only || void 0 })
       });
+      out.push(goodnight);
     }
+    if (night) return out;
     out.push(this._listSection("appliances", "Ger\xE4te", null, {
       create: () => ({ name: "Neues Ger\xE4t" }),
       addLabel: "+ Ger\xE4t hinzuf\xFCgen",
@@ -2624,7 +2770,7 @@ var PaneTodayCardEditor = class extends PaneEditor {
         { type: "grid", name: "", schema: [{ name: "color", selector: { text: {} } }, { name: "navigate", selector: { text: {} } }] }
       ]
     }));
-    out[out.length - 1].hint = "Gute Nacht, Bad, Pakete, Hinweise, Warnung und Updates bisher nur im Code-Editor.";
+    out[out.length - 1].hint = "Bad, Pakete, Hinweise, Warnung und Updates bisher nur im Code-Editor.";
     return out;
   }
 };

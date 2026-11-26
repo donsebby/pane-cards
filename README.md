@@ -70,7 +70,9 @@ installed).
 
 The start of the day in one card: date, weather, a short sentence about what
 matters now, then calendar events, waste pickup, PV forecast, running appliances
-and status rows. `view: running` shows only what is running right now.
+and status rows. `view: running` shows only what is running right now,
+`view: night` (“Haus für die Nacht”) shows open windows, lights that are on (with
+an *off* button) and the waste pickup – or a calm “all closed” row.
 
 ```yaml
 type: custom:pane-today-card
@@ -89,8 +91,18 @@ energy:
   battery: sensor.battery
 ```
 
-Most options are in the visual editor; good-night checks, bathroom, parcels,
-notices, warnings and updates are YAML only for now.
+Optional:
+
+- `timeline: true` – during the day, today as a timeline with times: events that
+  are not over yet (*jetzt* for the running one), sunset and the start of rain or
+  snow from the hourly forecast. `max_timeline` (default 6) caps the rows.
+- `outfit: true` – between 5 and 9 o'clock a first row with what to wear, from
+  the day's high (plus an umbrella when rain is expected).
+- `goodnight: { from, until, windows_label, lights_label, show_lights }` – the
+  check before bed; in `view: today` only between `from` and `until`.
+
+Most options are in the visual editor; bathroom, parcels, notices, warnings and
+updates are YAML only for now.
 
 ## Pane Rooms Card
 
@@ -111,7 +123,12 @@ rooms:
     area: bedroom
     climate: climate.bedroom
     windows: [binary_sensor.bedroom_window]
+    heating_status: sensor.bedroom_heating   # optional
 ```
+
+`heating_status` takes a text sensor of your own heating control: a state like
+`Manuell 22,0 °C bis 18:00` shows *Hand 22° bis 18:00*, a state starting with
+`Fenster` shows *Fenster offen* (only when the room has no `windows`).
 
 Configs of *today-glass-card* and *home-glass-card* work unchanged (the old type
 names are accepted as long as the old cards are not installed).
@@ -126,6 +143,10 @@ names are accepted as long as the old cards are not installed).
 | `pane-warm`, `pane-heat`, `pane-accent`, `pane-ok`, `pane-alert` | the five state colours |
 
 ## Changelog
+
+### Unreleased
+- Today: `timeline` (today with times, sunset, start of rain), `outfit` (what to wear in the morning), new `view: night` and the good-night options in the visual editor.
+- Rooms: `heating_status` per room shows manual heating (“Hand 22° bis 18:00”) and open windows reported by the heating control.
 
 ### 0.2.0
 - New: Pane Today Card (successor of today-glass-card) and Pane Rooms Card (successor of home-glass-card), both with glass and solid look and a visual editor.
