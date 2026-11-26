@@ -4,8 +4,11 @@ A family of Home Assistant cards that look like one: the same header, the same
 tiles, the same state colours – in **glass** or **solid**, decided by your theme.
 Every option is in the visual editor; YAML is only needed for templates.
 
-> Work in progress. First card: **Pane Tile Card**. More (thermostat, weather,
-> calendar, shopping list, chart, vacuum) move in one by one.
+![Pane Today, Pane Rooms and Pane Tile Card in glass (left) and solid (right)](images/preview.jpg)
+
+> Work in progress. In the pack so far: **Pane Tile Card**, **Pane Today Card** and
+> **Pane Rooms Card**. More (thermostat, weather, calendar, shopping list, chart,
+> vacuum) move in one by one. Today and Rooms show German texts for now.
 
 ## Installation
 
@@ -62,6 +65,56 @@ header fields accept `[[[ return … ]]]` with `states`, `hass`, `entity` and `f
 Configs of the *Liquid Glass Tile Card v2* work unchanged (`type:
 custom:liquid-glass-tile-card-v2` is accepted as long as the old card is not
 installed).
+
+## Pane Today Card
+
+The start of the day in one card: date, weather, a short sentence about what
+matters now, then calendar events, waste pickup, PV forecast, running appliances
+and status rows. `view: running` shows only what is running right now.
+
+```yaml
+type: custom:pane-today-card
+weather: weather.home
+calendars:
+  - entity: calendar.family
+    color: '#64B5F6'
+waste:
+  entities:
+    - entity: sensor.waste_paper   # attributes: YYYY-MM-DD pickup dates
+      name: Paper
+      color: '#4a90e2'
+energy:
+  pv_today: sensor.pv_today
+  pv_tomorrow: sensor.pv_tomorrow
+  battery: sensor.battery
+```
+
+Most options are in the visual editor; good-night checks, bathroom, parcels,
+notices, warnings and updates are YAML only for now.
+
+## Pane Rooms Card
+
+One tile per room with temperature, what the heating does, open windows and
+playing media, plus a row with all lights that are on and an *all off* button.
+
+```yaml
+type: custom:pane-rooms-card
+title: Home
+tiles: true
+lights_label: lights        # lights with this label count per area
+rooms:
+  - name: Living room
+    area: living_room
+    climate: climate.living_room
+    media: [media_player.living_room]
+  - name: Bedroom
+    area: bedroom
+    climate: climate.bedroom
+    windows: [binary_sensor.bedroom_window]
+```
+
+Configs of *today-glass-card* and *home-glass-card* work unchanged (the old type
+names are accepted as long as the old cards are not installed).
 
 ## Theme variables
 
