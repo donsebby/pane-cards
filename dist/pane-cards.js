@@ -2159,7 +2159,7 @@ var PaneTodayCard = class _PaneTodayCard extends PaneCard {
       const wet = (f2) => Number(f2.precipitation) >= 0.3 || TDC_WET.includes(f2.condition);
       const f = (this._fcHourly || []).find((x) => {
         const t = new Date(x.datetime);
-        return t > now && t < tom0 && wet(x);
+        return t.getTime() + 36e5 > now && t < tom0 && wet(x);
       });
       if (f) {
         const snow = TDC_SNOW.includes(f.condition);

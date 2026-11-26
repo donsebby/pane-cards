@@ -340,7 +340,7 @@ export class PaneTodayCard extends PaneCard {
     const ws = h.states[c.weather];
     if (!(ws && TDC_WET.includes(ws.state))) {
       const wet = (f) => Number(f.precipitation) >= 0.3 || TDC_WET.includes(f.condition);
-      const f = (this._fcHourly || []).find((x) => { const t = new Date(x.datetime); return t > now && t < tom0 && wet(x); });
+      const f = (this._fcHourly || []).find((x) => { const t = new Date(x.datetime); return t.getTime() + 3600e3 > now && t < tom0 && wet(x); }); // laufende Stunde zählt mit
       if (f) {
         const snow = TDC_SNOW.includes(f.condition);
         items.push(sideRow(new Date(f.datetime), snow ? 'mdi:weather-snowy' : 'mdi:weather-rainy', snow ? '#90CAF9' : '#64B5F6', snow ? 'Schnee ab' : 'Regen ab'));
