@@ -100,7 +100,11 @@ const STYLE = `
   .card.solid .bar-tile { touch-action: pan-y; }
   .card.solid .left { gap: 12px; flex: 1 1 auto; }
   .card.solid .icon-box { width: 36px; height: 36px; border-radius: 50%; box-shadow: none; z-index: 1; --mdc-icon-size: 20px; }
-  .card.solid .icon-box.active { background: var(--c); color: #16181d; }
+  /* the round icon lights up with the level, like a lamp: dim at 10 %, full at 100 % */
+  .card.solid .icon-box.active { color: #16181d; transition: background .15s ease, box-shadow .15s ease;
+    background: color-mix(in srgb, var(--c) calc(35% + var(--glow, 1) * 65%), color-mix(in srgb, ${INK} 14%, transparent)); }
+  .card.solid:not(.calm) .icon-box.active {
+    box-shadow: 0 0 calc(var(--glow, 1) * 16px) -2px color-mix(in srgb, var(--c) calc(var(--glow, 1) * 80%), transparent); }
   .card.solid .info .icon-box, .card.solid .info .icon-box.active { background: color-mix(in srgb, var(--c) 20%, transparent); color: var(--c); }
   .card.solid .info { background: var(--p-tile) !important; }
   .card.solid .text { position: relative; z-index: 1; }
@@ -493,6 +497,7 @@ export class PaneTileCard extends PaneCard {
     const paint = () => {
       setStyle(fill, 'width', `${pct * 100}%`);
       setText(sub, this._dragLabel(row, pct));
+      setStyle(tile, '--glow', Math.max(0.12, pct).toFixed(2));
     };
     const done = () => {
       window.removeEventListener('pointermove', move, true);
