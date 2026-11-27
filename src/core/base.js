@@ -153,8 +153,8 @@ export class PaneCard extends HTMLElement {
 
   isSolid() { return (this._lookOverride() || this._themeLook || 'glass') === 'solid'; }
 
-  // `glow: false` calms the coloured glows; the solid look has none.
-  glowOn() { return this._config?.glow !== false && !this.isSolid(); }
+  // `glow: false` calms the coloured glows; the solid look has none unless `glow: true` is set.
+  glowOn() { const g = this._config?.glow; return this.isSolid() ? g === true : g !== false; }
 
   _recheckThemeLook() {
     this._checkThemeLook();

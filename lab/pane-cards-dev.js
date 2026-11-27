@@ -311,9 +311,10 @@ var PaneCard = class _PaneCard extends HTMLElement {
   isSolid() {
     return (this._lookOverride() || this._themeLook || "glass") === "solid";
   }
-  // `glow: false` calms the coloured glows; the solid look has none.
+  // `glow: false` calms the coloured glows; the solid look has none unless `glow: true` is set.
   glowOn() {
-    return this._config?.glow !== false && !this.isSolid();
+    const g = this._config?.glow;
+    return this.isSolid() ? g === true : g !== false;
   }
   _recheckThemeLook() {
     this._checkThemeLook();
