@@ -10,6 +10,8 @@
 //   pane-backdrop    full backdrop-filter, wins over pane-blur
 //   pane-radius      card corner radius (lg-radius is read as well)
 //   pane-tile        tile background
+//   pane-tile-edge / pane-tile-shadow / pane-tile-backdrop
+//                    border, shadow and backdrop of solid tiles (glass solid tiles)
 //   pane-warm / pane-heat / pane-accent / pane-ok / pane-alert   state colours
 
 export const INK = 'var(--primary-text-color, #fff)';

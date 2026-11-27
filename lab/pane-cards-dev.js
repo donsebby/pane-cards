@@ -745,7 +745,11 @@ var STYLE = `
 
   /* solid look: calm tiles, no switch (the tile toggles), the whole bar tile
      is the slider, round icon that fills with the row colour */
-  .card.solid .pill, .card.solid .bar-tile, .card.solid .stat-tile { border: 1px solid transparent; box-shadow: none; }
+  .card.solid .pill, .card.solid .bar-tile, .card.solid .stat-tile {
+    border: var(--pane-tile-edge, var(--lg-tile-edge, 1px solid transparent));
+    box-shadow: var(--pane-tile-shadow, var(--lg-tile-shadow, none));
+    -webkit-backdrop-filter: var(--pane-tile-backdrop, var(--lg-tile-backdrop, none));
+    backdrop-filter: var(--pane-tile-backdrop, var(--lg-tile-backdrop, none)); }
   .card.solid .pill, .card.solid .bar-tile { overflow: hidden; isolation: isolate; flex-direction: row; align-items: center;
     justify-content: flex-start; gap: 12px; padding: 12px 14px; min-height: 64px; }
   .card.solid .pill.active, .card.solid .bar-tile.active { background: color-mix(in srgb, var(--c) 20%, var(--p-tile)); }

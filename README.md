@@ -147,6 +147,7 @@ names are accepted as long as the old cards are not installed).
 ### Unreleased
 - Today: `timeline` (today with times, sunset, start of rain), `outfit` (what to wear in the morning), new `view: night` and the good-night options in the visual editor.
 - Rooms: `heating_status` per room shows manual heating (“Hand 22° bis 18:00”) and open windows reported by the heating control.
+- Tile: solid tiles take their edge, shadow and backdrop from the theme (`pane-tile-edge`, `pane-tile-shadow`, `pane-tile-backdrop`), so the calm solid tiles can also be made of glass.
 
 ### 0.2.0
 - New: Pane Today Card (successor of today-glass-card) and Pane Rooms Card (successor of home-glass-card), both with glass and solid look and a visual editor.
